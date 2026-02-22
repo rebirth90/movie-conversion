@@ -58,7 +58,7 @@ def queue_worker_loop(poll_interval: int = 60) -> None:
                 # ===== DIRECTORY ROUTING INTERCEPTOR =====
                 match (job_path.is_dir(), media_type):
                     case (True, MediaType.TVSERIES):
-                        from tvseries_utils import clean_season_folder_name, queue_episodes
+                        from tvseries_utils import clean_season_folder_name
                         cleaned_path = clean_season_folder_name(job_path)
                         target_dir = cleaned_path if cleaned_path else job_path
                         
@@ -66,7 +66,9 @@ def queue_worker_loop(poll_interval: int = 60) -> None:
                         for ext in ('.mkv', '.mp4', '.avi', '.m4v'):
                             episodes.extend(target_dir.rglob(f"*{ext}"))
                         
-                        queue_episodes(episodes, db)
+                        for ep in episodes:
+                            db.add_job(str(ep.absolute()))
+                            logger.info(f"QUEUED_EPISODE: {ep}")
                         db.update_job_status(job_id, JobStatus.COMPLETED.value)
                         continue
                         

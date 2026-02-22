@@ -165,12 +165,15 @@ class ProcessingPipeline:
         if isinstance(self.context.media_item, Movie):
             from movie_utils import cleanup_movie_directory
             cleanup_movie_directory(self.context.media_item.source_path.parent, self.context.config)
-            
             try:
                 self.context.media_item.source_path.parent.rmdir()
             except OSError:
                 pass
-                
+        elif isinstance(self.context.media_item, TVEpisode):
+            try:
+                self.context.media_item.source_path.parent.rmdir()
+            except OSError:
+                pass
             try:
                 self.context.media_item.source_path.parent.parent.rmdir()
             except OSError:

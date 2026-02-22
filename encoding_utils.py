@@ -185,9 +185,11 @@ class IntelQSVStrategy(EncoderStrategy):
             builder.add_audio_option(f"-metadata:s:a:{i}", f"language={lang}")
 
         # --- FILTERS ---
-        if not is_hw_supported:
+        if not is_hw_supported and (stream_info.width != 1920 or stream_info.height != 1080):
             pad_filter = "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2"
             builder.add_filter(pad_filter)
+            builder.add_filter("format=p010,hwupload=extra_hw_frames=32")
+        elif not is_hw_supported:
             builder.add_filter("format=p010,hwupload=extra_hw_frames=32")
         else:
             hw_format = "p010" # Forced 10-bit Squeeze
