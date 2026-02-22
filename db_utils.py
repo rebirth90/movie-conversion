@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 from typing import Optional, Tuple
 from threading import Lock
+import fcntl
 from models import JobStatus
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,34 @@ class DatabaseManager:
         )
 
     # --- Job Queue Methods ---
+
+    def ingest_text_queue(self, queue_path: Path):
+        """Read text file, ingest paths into the queue, and clear it."""
+        if not queue_path.exists():
+            return
+            
+        try:
+            with open(queue_path, 'r+') as f:
+                # Exclusive lock
+                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                
+                lines = f.readlines()
+                for line in lines:
+                    path = line.strip()
+                    if path:
+                        self.add_job(path)
+                        
+                # Clear file
+                f.seek(0)
+                f.truncate()
+                
+                # Unlock
+                fcntl.flock(f, fcntl.LOCK_UN)
+        except BlockingIOError:
+            # File is locked by another process
+            pass
+        except Exception as e:
+            logger.error(f"Error reading queue file {queue_path}: {e}")
 
     def add_job(self, path: str) -> bool:
         """Add a job to the queue if it doesn't already exist."""

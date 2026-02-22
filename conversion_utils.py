@@ -109,7 +109,7 @@ class ProcessingPipeline:
                 if not temp_output.exists() or temp_output.stat().st_size < 1000:
                      raise VideoEncodingError("Output file missing or empty")
                      
-                logger.info(f"Encoding successful on tier: {attempt['desc']}")
+                logger.info(f"Encoding successful on tier: {attempt.desc}")
                 
                 # Save success heuristics cleanly
                 if s_info:
@@ -139,7 +139,15 @@ class ProcessingPipeline:
         logger.info("-- PHASE: Relocation --")
         
         target_root = self.context.media_item.target_directory()
-        final_dir = target_root / self.context.media_item.clean_name()
+        
+        from models import Movie, TVEpisode
+        
+        if isinstance(self.context.media_item, TVEpisode):
+            rel_path = self.context.media_item.source_path.parent.relative_to(self.context.config.base_tvseries_root)
+            final_dir = target_root / rel_path
+        else:
+            final_dir = target_root / self.context.media_item.clean_name()
+            
         final_dir.mkdir(parents=True, exist_ok=True)
         
         # Move video
@@ -157,17 +165,18 @@ class ProcessingPipeline:
              
         self.context.media_item.source_path.unlink()
         
-        from movie_utils import cleanup_movie_directory
-        cleanup_movie_directory(self.context.media_item.source_path.parent, self.context.config)
-        
-        try:
-            self.context.media_item.source_path.parent.rmdir()
-        except OSError:
-            pass
+        if isinstance(self.context.media_item, Movie):
+            from movie_utils import cleanup_movie_directory
+            cleanup_movie_directory(self.context.media_item.source_path.parent, self.context.config)
             
-        try:
-            self.context.media_item.source_path.parent.parent.rmdir()
-        except OSError:
-            pass
+            try:
+                self.context.media_item.source_path.parent.rmdir()
+            except OSError:
+                pass
+                
+            try:
+                self.context.media_item.source_path.parent.parent.rmdir()
+            except OSError:
+                pass
             
         return final_dir

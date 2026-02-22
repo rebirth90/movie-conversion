@@ -143,6 +143,8 @@ class IntelQSVStrategy(EncoderStrategy):
             stream_info.profile != "high 4:4:4 predictive" and 
             stream_info.profile != "high 10"
         )
+        if stream_info.width < 1920 or stream_info.height < 1080:
+            is_hw_supported = False
 
         # Base hwaccel options
         builder.add_global_option("-hwaccel", "qsv")
@@ -161,7 +163,9 @@ class IntelQSVStrategy(EncoderStrategy):
 
         # Standard maps
         builder.add_map("0:v:0")
-        builder.add_map("-1") # Discard chapters
+        builder.add_global_option("-map_chapters", "-1")
+        builder.add_global_option("-sn")
+        builder.add_global_option("-dn")
         
         # Audio mapping
         audio_streams = get_audio_streams(media_item.source_path, self.config)
@@ -172,6 +176,8 @@ class IntelQSVStrategy(EncoderStrategy):
             
             builder.add_map(f"0:{idx}")
             builder.add_audio_option(f"-c:a:{i}", "aac")
+            builder.add_audio_option(f"-ac:{i}", "2")
+            builder.add_audio_option(f"-af:{i}", "aresample=ochl=stereo")
             if channels >= 6:
                 builder.add_audio_option(f"-b:a:{i}", "256k")
             else:
@@ -179,24 +185,28 @@ class IntelQSVStrategy(EncoderStrategy):
             builder.add_audio_option(f"-metadata:s:a:{i}", f"language={lang}")
 
         # --- FILTERS ---
-        hw_format = "p010" # Forced 10-bit Squeeze
-        w_h = ""
-        if stream_info.width != 1920 or stream_info.height != 1080:
-             w_h = ":w=1920:h=1080"
-             
-        # Just use static high denoise since it's hardware
-        denoise_level = 15
-        
-        filter_parts = []
-        if denoise_level > 0:
-            filter_parts.append(f"denoise={denoise_level}")
-        if w_h:
-            filter_parts.append(w_h.lstrip(':'))
+        if stream_info.width < 1920 or stream_info.height < 1080:
+            builder.add_filter("pad=1920:1080:(ow-iw)/2:(oh-ih)/2")
+            builder.add_filter("format=p010,hwupload=extra_hw_frames=32")
+        else:
+            hw_format = "p010" # Forced 10-bit Squeeze
+            w_h = ""
+            if stream_info.width != 1920 or stream_info.height != 1080:
+                 w_h = ":w=1920:h=1080"
+                 
+            # Just use static high denoise since it's hardware
+            denoise_level = 15
             
-        filter_parts.append(f"format={hw_format}")
-        
-        vpp_filter = f"vpp_qsv={':'.join(filter_parts)}"
-        builder.add_filter(vpp_filter)
+            filter_parts = []
+            if denoise_level > 0:
+                filter_parts.append(f"denoise={denoise_level}")
+            if w_h:
+                filter_parts.append(w_h.lstrip(':'))
+                
+            filter_parts.append(f"format={hw_format}")
+            
+            vpp_filter = f"vpp_qsv={':'.join(filter_parts)}"
+            builder.add_filter(vpp_filter)
 
         # --- ENCODER OPTIONS ---
         builder.add_video_option("-c:v", "hevc_qsv")

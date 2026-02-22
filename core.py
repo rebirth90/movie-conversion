@@ -61,7 +61,7 @@ def queue_worker_loop(poll_interval: int = 60) -> None:
                         target_dir = cleaned_path if cleaned_path else job_path
                         
                         episodes = []
-                        for ext in ('.mkv', '.mp4', '.avi'):
+                        for ext in ('.mkv', '.mp4', '.avi', '.m4v'):
                             episodes.extend(target_dir.rglob(f"*{ext}"))
                         
                         queue_episodes(episodes, db)
