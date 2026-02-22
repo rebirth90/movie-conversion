@@ -9,7 +9,7 @@ from charset_normalizer import from_bytes
 import glob
 from langdetect import detect, LangDetectException
 from typing import Tuple, Optional
-from config import REPLACE_RULES
+from config import REPLACE_RULES, AppConfig
 import shutil
 
 
@@ -38,11 +38,11 @@ LANG_MAP = {
     "english": "en"
 }
 
-def get_track(movie_file: Path) -> Tuple[Optional[int], Optional[str], Optional[str]]:
+def get_track(movie_file: Path, config: AppConfig) -> Tuple[Optional[int], Optional[str], Optional[str]]:
     try:
         result = subprocess.run(
             [
-                str(FFPROBE_PATH),
+                str(config.ffprobe_path),
                 "-v",
                 "error",
                 "-select_streams",
@@ -92,7 +92,7 @@ def get_track(movie_file: Path) -> Tuple[Optional[int], Optional[str], Optional[
         return None, None, None
 
 
-def ffmpeg_extract_subtitle(movie_file: Path, movie_name: str, folder: Path, track_id: int, codec: str, language: str) -> Optional[Tuple[Path, str]]:
+def ffmpeg_extract_subtitle(movie_file: Path, movie_name: str, folder: Path, track_id: int, codec: str, language: str, config: AppConfig) -> Optional[Tuple[Path, str]]:
     # Resolve codec extension
     extension = CODEC_MAP.get(codec)
     if not extension:
@@ -125,7 +125,7 @@ def ffmpeg_extract_subtitle(movie_file: Path, movie_name: str, folder: Path, tra
                     str(subtitle_path),
                 ]
                 subprocess.run(
-                    [str(FFMPEG_PATH)] + args,
+                    [str(config.ffmpeg_path)] + args,
                     capture_output=True,
                     text=True,
                     stdin=subprocess.DEVNULL,
@@ -135,7 +135,7 @@ def ffmpeg_extract_subtitle(movie_file: Path, movie_name: str, folder: Path, tra
                 # Use mkvextract for MKV containers (preserves codec)
                 args = ["tracks", str(movie_file), f"{track_id}:{subtitle_path}"]
                 subprocess.run(
-                    [str(MKVEXTRACT_PATH)] + args,
+                    [str(config.mkvextract_path)] + args,
                     capture_output=True,
                     text=True,
                     check=True,
@@ -159,14 +159,14 @@ def ffmpeg_extract_subtitle(movie_file: Path, movie_name: str, folder: Path, tra
         logger.exception(f"UNEXPECTED_ERROR extracting subtitle: {e}")
         return None
 
-def extract_subtitle(movie_file, movie_name, output_dir):
-    track_id, codec, language = get_track(movie_file)
+def extract_subtitle(movie_file, movie_name, output_dir, config: AppConfig):
+    track_id, codec, language = get_track(movie_file, config)
 
     if track_id is None or codec is None or language is None:
         return None, None, None
 
     logger.info(f"Extracting subtitle track {track_id} ({language}, codec: {codec})")
-    result = ffmpeg_extract_subtitle(movie_file, movie_name, output_dir, track_id, codec, language)
+    result = ffmpeg_extract_subtitle(movie_file, movie_name, output_dir, track_id, codec, language, config)
     
     if not result:
         return None, None, None
@@ -361,7 +361,7 @@ def get_first_subtitle_found(movie_file: Path) -> Optional[Path]:
 
     return None
 
-def find_or_extract_subtitle(movie_file: Path, movie_name: str, output_dir: Path) -> Tuple[Optional[Path], Optional[str], Optional[str]]:
+def find_or_extract_subtitle(movie_file: Path, movie_name: str, output_dir: Path, config: AppConfig) -> Tuple[Optional[Path], Optional[str], Optional[str]]:
     """
     Strategy:
     1. Look for existing external subtitle.
@@ -395,7 +395,7 @@ def find_or_extract_subtitle(movie_file: Path, movie_name: str, output_dir: Path
         
     else:
         logger.info("No external subtitle found, attempting extraction...")
-        extracted_subtitle_file, language, extension = extract_subtitle(movie_file, movie_name, output_dir)
+        extracted_subtitle_file, language, extension = extract_subtitle(movie_file, movie_name, output_dir, config)
         
         if extracted_subtitle_file:
             logger.info(f"Using extracted embedded subtitle: {extracted_subtitle_file}")
@@ -404,7 +404,7 @@ def find_or_extract_subtitle(movie_file: Path, movie_name: str, output_dir: Path
             logger.warning("No subtitle found locally or embedded.")
             return None, None, None
 
-def convert_sub_to_srt(sub_file: Path) -> Optional[Path]:
+def convert_sub_to_srt(sub_file: Path, config: AppConfig) -> Optional[Path]:
     """
     Converts MicroDVD (.sub) to SubRip (.srt) using ffmpeg.
     Returns the path to the new .srt file if successful.
@@ -412,7 +412,7 @@ def convert_sub_to_srt(sub_file: Path) -> Optional[Path]:
     srt_file = sub_file.with_suffix('.srt')
     
     cmd = [
-        str(FFMPEG_PATH), "-y",
+        str(config.ffmpeg_path), "-y",
         "-i", str(sub_file),
         str(srt_file)
     ]
@@ -432,14 +432,14 @@ def convert_sub_to_srt(sub_file: Path) -> Optional[Path]:
     
     return None
 
-def process_subtitle(job_path: Path, cleaned_video_name: str) -> Optional[Path]:
+def process_subtitle(job_path: Path, cleaned_video_name: str, config: AppConfig) -> Optional[Path]:
     """
     Handle subtitle extraction/discovery and conversion (UTF-8, character replacement).
     SAFEGUARD: Skips text processing if .idx file exists (VobSub).
     Returns path to the processed subtitle file, or None if failed.
     """
     output_dir = job_path.parent
-    subtitle_file, language, extension = find_or_extract_subtitle(job_path, cleaned_video_name, output_dir)
+    subtitle_file, language, extension = find_or_extract_subtitle(job_path, cleaned_video_name, output_dir, config)
 
     if not subtitle_file:
         return None
@@ -487,7 +487,7 @@ def process_subtitle(job_path: Path, cleaned_video_name: str) -> Optional[Path]:
                     first_char = f.read(1)
                 
                 if first_char == '{':
-                    new_srt = convert_sub_to_srt(subtitle_file)
+                    new_srt = convert_sub_to_srt(subtitle_file, config)
                     if new_srt:
                         subtitle_file = new_srt  # Switch to using the new .srt file
             except Exception as e:

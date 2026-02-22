@@ -40,7 +40,7 @@ class ProcessingPipeline:
         """Handles subtitle extraction and standardization."""
         logger.info("-- PHASE: Subtitle Extraction --")
         try:
-            sub = process_subtitle(self.context.media_item.source_path, self.context.media_item.clean_name())
+            sub = process_subtitle(self.context.media_item.source_path, self.context.media_item.clean_name(), self.context.config)
             if not sub:
                 logger.warning("No subtitle processed. Continuing with video only.")
                 return None
@@ -101,7 +101,7 @@ class ProcessingPipeline:
             cmd = builder.build()
             
             try:
-                proc = execute_process(cmd, wait_for_completion=True)
+                proc = execute_process(cmd, wait_for_completion=True, config=self.context.config, log_name=self.context.media_item.clean_name())
                 if proc is None:
                     raise VRAMExhaustionError("Process returned None (Likely VRAM crash)")
                 
@@ -119,7 +119,7 @@ class ProcessingPipeline:
                     )
                 return temp_output
 
-            except VRAMExhaustionError as e:
+            except (VRAMExhaustionError, VideoEncodingError) as e:
                 logger.warning(f"Hardware limits exceeded: {e}. Stepping down.")
                 if temp_output.exists():
                      temp_output.unlink(missing_ok=True)
@@ -156,4 +156,18 @@ class ProcessingPipeline:
              return final_dir
              
         self.context.media_item.source_path.unlink()
+        
+        from movie_utils import cleanup_movie_directory
+        cleanup_movie_directory(self.context.media_item.source_path.parent, self.context.config)
+        
+        try:
+            self.context.media_item.source_path.parent.rmdir()
+        except OSError:
+            pass
+            
+        try:
+            self.context.media_item.source_path.parent.parent.rmdir()
+        except OSError:
+            pass
+            
         return final_dir

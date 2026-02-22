@@ -7,11 +7,47 @@ from abc import ABC, abstractmethod
 from typing import List
 from pathlib import Path
 import logging
+import subprocess
+import json
+import datetime
 
 from config import AppConfig
 from models import MediaItem
 
 logger = logging.getLogger(__name__)
+
+def get_audio_streams(movie_file: Path, config: AppConfig) -> List[dict]:
+    try:
+        result = subprocess.run(
+            [
+                str(config.ffprobe_path),
+                "-v",
+                "error",
+                "-select_streams",
+                "a",
+                "-show_entries",
+                "stream=index,channels:stream_tags=language",
+                "-of",
+                "json",
+                str(movie_file),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        probe_data = json.loads(result.stdout)
+        audio_streams = []
+        for stream in probe_data.get("streams", []):
+            index = stream.get("index")
+            channels = stream.get("channels", 2)
+            lang = stream.get("tags", {}).get("language", "unk").lower()
+            audio_streams.append({"index": index, "channels": channels, "lang": lang})
+
+        return audio_streams
+    except Exception as e:
+        logger.error(f"Error extracting audio streams: {e}")
+        return []
 
 class FFmpegCommandBuilder:
     """Builder pattern for constructing FFmpeg commands cleanly."""
@@ -128,8 +164,19 @@ class IntelQSVStrategy(EncoderStrategy):
         builder.add_map("-1") # Discard chapters
         
         # Audio mapping
-        for track in getattr(media_item, 'audio_tracks', []):
-            builder.add_map(f"0:{track}")
+        audio_streams = get_audio_streams(media_item.source_path, self.config)
+        for i, stream in enumerate(audio_streams):
+            idx = stream.get('index')
+            channels = stream.get('channels', 2)
+            lang = stream.get('lang', 'unk')
+            
+            builder.add_map(f"0:{idx}")
+            builder.add_audio_option(f"-c:a:{i}", "aac")
+            if channels >= 6:
+                builder.add_audio_option(f"-b:a:{i}", "256k")
+            else:
+                builder.add_audio_option(f"-b:a:{i}", "192k")
+            builder.add_audio_option(f"-metadata:s:a:{i}", f"language={lang}")
 
         # --- FILTERS ---
         hw_format = "p010" # Forced 10-bit Squeeze
@@ -178,20 +225,33 @@ class IntelQSVStrategy(EncoderStrategy):
         
         return builder
 
-def execute_process(args: List[str], wait_for_completion: bool = True):
+def execute_process(args: List[str], wait_for_completion: bool = True, config: AppConfig = None, log_name: str = "ffmpeg"):
     """Execute generic subprocess correctly."""
-    import subprocess
     try:
-        proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        if config:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_file_path = config.log_ffmpeg_dir / f"{log_name}_{timestamp}.log"
+            log_file = open(log_file_path, "w")
+            proc = subprocess.Popen(args, stdout=log_file, stderr=log_file, text=True)
+        else:
+            log_file = None
+            proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         
         if not wait_for_completion:
             return proc
             
         _, stderr = proc.communicate()
         if proc.returncode != 0:
-            logger.error(f"Command failed: {stderr}")
+            if config:
+                logger.error(f"Command failed. Check log at: {log_file_path}")
+            else:
+                logger.error(f"Command failed: {stderr}")
+            if log_file:
+                log_file.close()
             return None
             
+        if log_file:
+            log_file.close()
         return proc
     except Exception as e:
         logger.error(f"Subprocess Execution Error: {e}")
