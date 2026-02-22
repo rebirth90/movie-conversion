@@ -146,6 +146,15 @@ class DatabaseManager:
             )
             conn.commit()
 
+    def reset_orphaned_jobs(self):
+        """Reset jobs that were marked PROCESSING if the worker crashed."""
+        with self._lock, self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE jobs SET status = 'PENDING' WHERE status = 'PROCESSING'"
+            )
+            conn.commit()
+
     # --- Heuristics Methods ---
 
     def get_best_profile(self, width: int, height: int, codec: str, pix_fmt: str) -> Optional[Tuple[int, int, int]]:
@@ -153,7 +162,7 @@ class DatabaseManager:
         Get the most aggressive known-safe parameters for the given media type.
         Returns: (bf, lad, async_depth) or None if no heuristic is known.
         """
-        with self._get_connection() as conn:
+        with self._lock, self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT best_bf, best_lad, best_async_depth 

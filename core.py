@@ -26,6 +26,8 @@ def queue_worker_loop(poll_interval: int = 60) -> None:
     logger.info(f"SQLite DB: {db.db_path}")
     logger.info(f"Poll_interval: {poll_interval}s")
     logger.info("="*80)
+    
+    db.reset_orphaned_jobs()
 
     while True:
         try:

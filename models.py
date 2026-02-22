@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Optional
 from enum import Enum, auto
 import logging
-from pymediainfo import MediaInfo
+import subprocess
+import json
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -32,28 +33,41 @@ class VideoStreamInfo:
     
     @classmethod
     def from_file(cls, filepath: Path) -> 'VideoStreamInfo':
-        """Extract stream info using pymediainfo, replacing brittle subprocess ffprobe calls."""
+        """Extract stream info using native ffprobe json."""
+        from config import AppConfig
+        config = AppConfig()
         try:
-            media_info = MediaInfo.parse(str(filepath))
-            video_tracks = [t for t in media_info.tracks if t.track_type == "Video"]
+            result = subprocess.run(
+                [
+                    str(config.ffprobe_path),
+                    "-v",
+                    "error",
+                    "-select_streams",
+                    "v:0",
+                    "-show_entries",
+                    "stream=codec_name,profile,width,height,pix_fmt",
+                    "-of",
+                    "json",
+                    str(filepath),
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
             
-            if not video_tracks:
+            probe_data = json.loads(result.stdout)
+            streams = probe_data.get("streams", [])
+            
+            if not streams:
                 raise MediaValidationError(f"No video tracks found in {filepath}")
                 
-            track = video_tracks[0]
+            track = streams[0]
             
-            # Defensive fetching since pymediainfo attributes can be None
-            width = track.width
-            height = track.height
-            codec_name = track.format or track.codec_id
-            profile = track.format_profile or "unknown"
-            # pymediainfo uses 'color_space' and 'bit_depth'
-            # We map this approximately to ffprobe's 'pix_fmt' strings we used
-            bit_depth = track.bit_depth or 8
-            if bit_depth >= 10:
-                pix_fmt = "p010le" # General 10-bit format we used to check simply for "10"
-            else:
-                pix_fmt = "yuv420p"
+            width = track.get("width")
+            height = track.get("height")
+            codec_name = track.get("codec_name", "unknown")
+            profile = track.get("profile", "unknown")
+            pix_fmt = track.get("pix_fmt", "unknown")
 
             if not width or not height:
                 raise MediaValidationError(f"Missing width/height in {filepath}")
@@ -63,7 +77,7 @@ class VideoStreamInfo:
                 height=int(height),
                 codec_name=str(codec_name).lower(),
                 profile=str(profile).lower(),
-                pix_fmt=str(pix_fmt)
+                pix_fmt=str(pix_fmt).lower()
             )
         except Exception as e:
             if isinstance(e, MediaValidationError):

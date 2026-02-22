@@ -137,14 +137,14 @@ class IntelQSVStrategy(EncoderStrategy):
         if not stream_info:
             raise ValueError("Stream info missing from MediaItem")
 
-        # Determine Hardware Pipeline capabilities
+        aspect_ratio = stream_info.width / stream_info.height
         is_hw_supported = (
             stream_info.codec_name in ["hevc", "h264", "vp9"] and 
             stream_info.profile != "high 4:4:4 predictive" and 
-            stream_info.profile != "high 10"
+            stream_info.profile != "high 10" and
+            abs(aspect_ratio - 1.777) < 0.05 and
+            stream_info.width <= 1920
         )
-        if stream_info.width < 1920 or stream_info.height < 1080:
-            is_hw_supported = False
 
         # Base hwaccel options
         builder.add_global_option("-hwaccel", "qsv")
@@ -185,8 +185,9 @@ class IntelQSVStrategy(EncoderStrategy):
             builder.add_audio_option(f"-metadata:s:a:{i}", f"language={lang}")
 
         # --- FILTERS ---
-        if stream_info.width < 1920 or stream_info.height < 1080:
-            builder.add_filter("pad=1920:1080:(ow-iw)/2:(oh-ih)/2")
+        if not is_hw_supported:
+            pad_filter = "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2"
+            builder.add_filter(pad_filter)
             builder.add_filter("format=p010,hwupload=extra_hw_frames=32")
         else:
             hw_format = "p010" # Forced 10-bit Squeeze

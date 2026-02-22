@@ -77,10 +77,7 @@ class ProcessingPipeline:
             best_bf, best_lad, best_async = best_profile
             logger.info(f"Loaded heuristics from DB: {best_bf}bf, {best_lad}lad")
             # Filter out tiers strictly more aggressive than the known best
-            valid_tiers = []
-            for t in tiers:
-                if t['bf'] <= best_bf and t['lad'] <= best_lad:
-                    valid_tiers.append(t)
+            valid_tiers = [t for t in tiers if t.bf <= best_bf and t.lad <= best_lad]
             
             if valid_tiers:
                  tiers = valid_tiers
