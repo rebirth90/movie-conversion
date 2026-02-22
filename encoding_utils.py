@@ -138,6 +138,7 @@ class IntelQSVStrategy(EncoderStrategy):
             raise ValueError("Stream info missing from MediaItem")
 
         aspect_ratio = stream_info.width / stream_info.height
+        # Note: AV1, VC1, MPEG2, and VP8 deliberately fall to hybrid mode based on Gen9.5 capabilities.
         is_hw_supported = (
             stream_info.codec_name in ["hevc", "h264", "vp9"] and 
             stream_info.profile != "high 4:4:4 predictive" and 
@@ -198,7 +199,7 @@ class IntelQSVStrategy(EncoderStrategy):
                  w_h = ":w=1920:h=1080"
                  
             # Just use static high denoise since it's hardware
-            denoise_level = 15
+            denoise_level = self.config.qsv_denoise_level
             
             filter_parts = []
             if denoise_level > 0:
@@ -227,7 +228,7 @@ class IntelQSVStrategy(EncoderStrategy):
         # Golden standard controls
         builder.add_video_option("-bf", str(bf))
         builder.add_video_option("-b_strategy", "1")
-        builder.add_video_option("-g", "600")
+        builder.add_video_option("-g", "240")
         builder.add_video_option("-mbbrc", "1")
         builder.add_video_option("-rc_mode", "icq")
         builder.add_video_option("-max_muxing_queue_size", "9999")
@@ -240,6 +241,7 @@ class IntelQSVStrategy(EncoderStrategy):
 
 def execute_process(args: List[str], wait_for_completion: bool = True, config: AppConfig = None, log_name: str = "ffmpeg"):
     """Execute generic subprocess correctly."""
+    log_file = None
     try:
         if config:
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -247,7 +249,6 @@ def execute_process(args: List[str], wait_for_completion: bool = True, config: A
             log_file = open(log_file_path, "w")
             proc = subprocess.Popen(args, stdout=log_file, stderr=log_file, text=True)
         else:
-            log_file = None
             proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         
         if not wait_for_completion:
@@ -259,13 +260,12 @@ def execute_process(args: List[str], wait_for_completion: bool = True, config: A
                 logger.error(f"Command failed. Check log at: {log_file_path}")
             else:
                 logger.error(f"Command failed: {stderr}")
-            if log_file:
-                log_file.close()
             return None
             
-        if log_file:
-            log_file.close()
         return proc
     except Exception as e:
         logger.error(f"Subprocess Execution Error: {e}")
         return None
+    finally:
+        if wait_for_completion and log_file:
+            log_file.close()

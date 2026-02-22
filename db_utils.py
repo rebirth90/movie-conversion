@@ -151,7 +151,7 @@ class DatabaseManager:
         with self._lock, self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "UPDATE jobs SET status = 'PENDING' WHERE status = 'PROCESSING'"
+                "UPDATE jobs SET status = 'PENDING' WHERE status = 'PROCESSING' AND updated_at <= datetime('now', '-60 minutes')"
             )
             conn.commit()
 

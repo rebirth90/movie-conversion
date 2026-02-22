@@ -22,10 +22,25 @@ class ProcessingPipeline:
 
     def run(self) -> Path:
         """Executes the conversion pipeline."""
-        logger.info(f"=== PIPELINE STARTED: {self.context.media_item.clean_name()} ===")
+        logger.info(f"=== PIPELINE STARTED: {self.context.media_item.source_path.name} ===")
         
-        # 1. Extract Subtitles
-        subtitle_path = self._extract_subtitles()
+        # Fast-fail if target already exists
+        target_root = self.context.media_item.target_directory()
+        expected_mp4 = f"{self.context.media_item.clean_name()}_converted.mp4"
+        
+        from models import TVEpisode
+        if isinstance(self.context.media_item, TVEpisode):
+            rel_path = self.context.media_item.source_path.parent.relative_to(self.context.config.base_tvseries_root)
+            check_path = target_root / rel_path / expected_mp4
+        else:
+            check_path = target_root / self.context.media_item.clean_name() / expected_mp4
+            
+        if check_path.exists():
+            logger.warning(f"TARGET_EXISTS: {check_path.name}. Skipping conversion.")
+            self.context.media_item.source_path.unlink(missing_ok=True)
+            return check_path.parent
+        
+        # --- PHASE 1: Subtitle Extraction ---       subtitle_path = self._extract_subtitles()
         
         # 2. Encode Video
         encoded_file = self._encode_video_with_heuristics()
@@ -155,6 +170,12 @@ class ProcessingPipeline:
         if subtitle_file and subtitle_file.exists():
              final_sub_path = final_dir / subtitle_file.name
              shutil.move(str(subtitle_file), str(final_sub_path))
+             
+             if subtitle_file.suffix.lower() == '.sub':
+                 idx_file = subtitle_file.with_suffix('.idx')
+                 if idx_file.exists():
+                     final_idx_path = final_dir / idx_file.name
+                     shutil.move(str(idx_file), str(final_idx_path))
              
         # Cleanup original source video to save space
         if not self.context.media_item.source_path.exists():

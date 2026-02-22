@@ -133,8 +133,9 @@ def queue_worker_loop(poll_interval: int = 60) -> None:
                         # We search for files starting with the sanitized log_name in LOG_FFMPEG_DIR
                         # and pick the most recent one modified in the last few minutes.
                         if config.log_ffmpeg_dir.exists():
-                            # simple match
-                            candidates = list(config.log_ffmpeg_dir.glob(f"*{log_name}*.log"))
+                            import glob
+                            safe_log_name = glob.escape(log_name)
+                            candidates = list(config.log_ffmpeg_dir.glob(f"*{safe_log_name}*.log"))
                             if candidates:
                                 # Sort by modification time, newest first
                                 newest_ffmpeg_log = max(candidates, key=lambda p: p.stat().st_mtime)

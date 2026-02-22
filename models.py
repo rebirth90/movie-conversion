@@ -32,10 +32,8 @@ class VideoStreamInfo:
     pix_fmt: str
     
     @classmethod
-    def from_file(cls, filepath: Path) -> 'VideoStreamInfo':
+    def from_file(cls, filepath: Path, config: 'AppConfig') -> 'VideoStreamInfo':
         """Extract stream info using native ffprobe json."""
-        from config import AppConfig
-        config = AppConfig()
         try:
             result = subprocess.run(
                 [
@@ -121,7 +119,7 @@ class MediaItem(ABC):
         
         # Load stream info immediately to validate
         if self.source_path.is_file():
-             self.stream_info = VideoStreamInfo.from_file(self.source_path)
+             self.stream_info = VideoStreamInfo.from_file(self.source_path, self.config)
 
     @abstractmethod
     def target_directory(self) -> Path:

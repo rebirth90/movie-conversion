@@ -54,6 +54,7 @@ class AppConfig:
     vaapi_device: str = "/dev/dri/renderD128" # Kept for backwards compatibility but we are shifting to QSV
     qsv_device: str = "/dev/dri/renderD128"
     global_quality_default: int = 23
+    qsv_denoise_level: int = 15
 
     # Character replacement rules for Romanian subtitles
     replace_rules: List[Tuple[str, str]] = field(default_factory=lambda: [
