@@ -73,6 +73,7 @@ def main() -> None:
 
     # Validate configuration before starting
     config = AppConfig()
+    config.setup_directories()
     if not config.validate():
         print("CONFIGURATION_VALIDATION_FAILED - check logs")
         sys.exit(1)

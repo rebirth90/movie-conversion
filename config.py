@@ -43,15 +43,14 @@ class AppConfig:
     tmdb_read_access_token: str = field(default_factory=lambda: os.getenv("TMDB_READ_ACCESS_TOKEN", ""))
 
     # Email Configuration
-    email_smtp_host: str = "smtp.gmail.com"
-    email_smtp_port: int = 587
-    email_smtp_ssl: bool = False
+    email_smtp_host: str = field(default_factory=lambda: os.getenv("EMAIL_SMTP_HOST", "smtp.gmail.com"))
+    email_smtp_port: int = field(default_factory=lambda: int(os.getenv("EMAIL_SMTP_PORT", "587")))
+    email_smtp_ssl: bool = field(default_factory=lambda: os.getenv("EMAIL_SMTP_SSL", "False").lower() == "true")
     email_smtp_username: str = field(default_factory=lambda: os.getenv("EMAIL_SMTP_USERNAME", ""))
     email_smtp_password: str = field(default_factory=lambda: os.getenv("EMAIL_SMTP_PASSWORD", ""))
     email_recipient: str = field(default_factory=lambda: os.getenv("EMAIL_RECIPIENT", ""))
 
     # Hardware Encoding Configuration
-    vaapi_device: str = "/dev/dri/renderD128" # Kept for backwards compatibility but we are shifting to QSV
     qsv_device: str = "/dev/dri/renderD128"
     global_quality_default: int = 23
     qsv_denoise_level: int = 15
@@ -71,6 +70,11 @@ class AppConfig:
         object.__setattr__(self, 'log_general_dir', self.log_dir / "general")
         object.__setattr__(self, 'log_ffmpeg_dir', self.log_dir / "ffmpeg")
 
+    def setup_directories(self) -> None:
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.log_general_dir.mkdir(parents=True, exist_ok=True)
+        self.log_ffmpeg_dir.mkdir(parents=True, exist_ok=True)
+
     def validate(self) -> bool:
         """Validate all configuration at startup."""
         errors = []
@@ -80,20 +84,26 @@ class AppConfig:
 
         if not self.email_smtp_password:
             errors.append("Missing EMAIL_SMTP_PASSWORD in environment.")
+            
+        if not self.email_smtp_username:
+            errors.append("Missing EMAIL_SMTP_USERNAME in environment.")
+            
+        if not self.email_recipient:
+            errors.append("Missing EMAIL_RECIPIENT in environment.")
 
-        try:
-            self.log_dir.mkdir(parents=True, exist_ok=True)
-            self.log_general_dir.mkdir(parents=True, exist_ok=True)
-            self.log_ffmpeg_dir.mkdir(parents=True, exist_ok=True)
-        except Exception as e:
-            errors.append(f"Cannot create log directories: {e}")
-
-        for path_name, path in [
+        for path_name, path_val in [
             ("base_movies_root", self.base_movies_root),
             ("base_tvseries_root", self.base_tvseries_root),
+            ("target_movies_dir", self.target_movies_dir),
+            ("target_tvseries_dir", self.target_tvseries_dir),
+            ("scratch_dir", self.scratch_dir),
+            ("archive_dir", self.archive_dir),
         ]:
-            if not path.exists():
-                errors.append(f"Missing path {path_name}: {path}")
+            if not path_val.exists():
+                errors.append(f"Missing required path {path_name}: {path_val}")
+                
+        if not self.db_path.parent.exists():
+            errors.append(f"Missing database directory: {self.db_path.parent}")
 
         for tool_name, tool_path in [
             ("FFmpeg", self.ffmpeg_path),
@@ -109,7 +119,7 @@ class AppConfig:
         if not 1 <= self.global_quality_default <= 51:
             errors.append(f"Invalid quality (must be 1-51): {self.global_quality_default}")
             
-        if not 0 <= getattr(self, 'qsv_denoise_level', 15) <= 100:
+        if not 0 <= self.qsv_denoise_level <= 100:
             errors.append(f"Invalid qsv_denoise_level (must be 0-100): {self.qsv_denoise_level}")
 
         if errors:
