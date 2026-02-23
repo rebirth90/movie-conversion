@@ -82,8 +82,8 @@ class ProcessingPipeline:
         logger.info("-- PHASE: Video Encoding --")
         # Define base tiers
         tiers = [
+            EncodingTier(bf=4, lad=20, async_depth=4, desc="Balanced (Start Here)"),
             EncodingTier(bf=7, lad=40, async_depth=8, desc="Max Quality (High VRAM)"),
-            EncodingTier(bf=4, lad=20, async_depth=4, desc="Balanced (Medium VRAM)"),
             EncodingTier(bf=0, lad=10, async_depth=2, desc="Safe Mode (Low VRAM)")
         ]
 
@@ -190,6 +190,11 @@ class ProcessingPipeline:
                 from models import JobStatus
                 self.context.db.update_job_status(self.context.job_id, JobStatus.FAILED.value)
                 return False
+        elif isinstance(self.context.media_item, Movie):
+            if self.context.media_item.source_path.parent == self.context.config.base_movies_root:
+                final_dir = self.context.config.target_movies_dir / self.context.media_item.clean_name()
+            else:
+                final_dir = target_root / self.context.media_item.clean_name()
         else:
             final_dir = target_root / self.context.media_item.clean_name()
             
@@ -221,18 +226,22 @@ class ProcessingPipeline:
         if isinstance(self.context.media_item, Movie):
             from movie_utils import cleanup_movie_directory
             cleanup_movie_directory(self.context.media_item.source_path.parent, self.context.config)
-            try:
-                self.context.media_item.source_path.parent.rmdir()
-            except OSError:
-                pass
+            parent_dir = self.context.media_item.source_path.parent
+            if parent_dir.exists() and parent_dir.is_dir():
+                if not any(parent_dir.iterdir()):
+                    logger.info(f"Directory empty, removing: {parent_dir}")
+                    parent_dir.rmdir()
         elif isinstance(self.context.media_item, TVEpisode):
-            try:
-                self.context.media_item.source_path.parent.rmdir()
-            except OSError:
-                pass
-            try:
-                self.context.media_item.source_path.parent.parent.rmdir()
-            except OSError:
-                pass
+            parent_dir = self.context.media_item.source_path.parent
+            if parent_dir.exists() and parent_dir.is_dir():
+                if not any(parent_dir.iterdir()):
+                    logger.info(f"Directory empty, removing: {parent_dir}")
+                    parent_dir.rmdir()
+            
+            grandparent_dir = self.context.media_item.source_path.parent.parent
+            if grandparent_dir.exists() and grandparent_dir.is_dir():
+                if not any(grandparent_dir.iterdir()):
+                    logger.info(f"Directory empty, removing: {grandparent_dir}")
+                    grandparent_dir.rmdir()
             
         return final_dir

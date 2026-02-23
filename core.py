@@ -32,7 +32,12 @@ def queue_worker_loop(config: AppConfig, shutdown_event, poll_interval: int = 60
         try:
             from file_utils import validate_target_root
             if not validate_target_root(config.base_movies_root) and not validate_target_root(config.base_tvseries_root):
-                logger.critical("Both target roots are inaccessible. Waiting for mount...")
+                logger.critical("Both source roots are inaccessible. Waiting for mount...")
+                time.sleep(60)
+                continue
+                
+            if not validate_target_root(config.target_movies_dir) and not validate_target_root(config.target_tvseries_dir):
+                logger.critical("Both target archive directories are inaccessible. Waiting for mount...")
                 time.sleep(60)
                 continue
 

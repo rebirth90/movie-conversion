@@ -27,7 +27,13 @@ def linux_mv(source: Path, dest: Path) -> None:
 
 def validate_target_root(target_path: Path) -> bool:
     """Return True if path exists, is a directory, and is writable using os.access(path, os.W_OK)"""
-    return target_path.exists() and target_path.is_dir() and os.access(target_path, os.W_OK)
+    if not target_path.exists():
+        logger.error(f"Target path does not exist: {target_path}")
+        return False
+    if not os.access(target_path, os.W_OK):
+        logger.error(f"Target path is not writable: {target_path}")
+        return False
+    return True
 
 def validate_tool_paths(config: AppConfig) -> bool:
     """Verify all required tools are accessible."""

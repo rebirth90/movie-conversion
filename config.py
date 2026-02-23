@@ -8,7 +8,7 @@ Refactored to use a dataclass for Domain-Driven Design.
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Tuple, Set
+from typing import List, Tuple, Set, Optional
 import logging
 import os
 
@@ -43,9 +43,9 @@ class AppConfig:
     email_smtp_host: str = field(default_factory=lambda: os.getenv("EMAIL_SMTP_HOST", "smtp.gmail.com"))
     email_smtp_port: str = field(default_factory=lambda: os.getenv("EMAIL_SMTP_PORT", "587"))
     email_smtp_ssl: bool = field(default_factory=lambda: os.getenv("EMAIL_SMTP_SSL", "False").lower() == "true")
-    email_smtp_username: str = field(default_factory=lambda: os.getenv("EMAIL_SMTP_USERNAME", ""))
-    email_smtp_password: str = field(default_factory=lambda: os.getenv("EMAIL_SMTP_PASSWORD", ""))
-    email_recipient: str = field(default_factory=lambda: os.getenv("EMAIL_RECIPIENT", ""))
+    email_smtp_username: Optional[str] = field(default_factory=lambda: os.getenv("EMAIL_SMTP_USERNAME", None))
+    email_smtp_password: Optional[str] = field(default_factory=lambda: os.getenv("EMAIL_SMTP_PASSWORD", None))
+    email_recipient: Optional[str] = field(default_factory=lambda: os.getenv("EMAIL_RECIPIENT", None))
 
     # Hardware Encoding Configuration
     qsv_device: str = "/dev/dri/renderD128"
@@ -79,15 +79,6 @@ class AppConfig:
         if not self.tmdb_read_access_token:
             errors.append("Missing TMDB_READ_ACCESS_TOKEN in environment.")
 
-        if not self.email_smtp_password:
-            errors.append("Missing EMAIL_SMTP_PASSWORD in environment.")
-            
-        if not self.email_smtp_username:
-            errors.append("Missing EMAIL_SMTP_USERNAME in environment.")
-            
-        if not self.email_recipient:
-            errors.append("Missing EMAIL_RECIPIENT in environment.")
-            
         if not self.email_smtp_port.isdigit() or not 1 <= int(self.email_smtp_port) <= 65535:
             errors.append(f"Invalid EMAIL_SMTP_PORT: {self.email_smtp_port}")
 

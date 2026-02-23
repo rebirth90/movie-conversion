@@ -27,7 +27,7 @@ def send_failure_email(config: AppConfig, subject: str, body: str, attachment_pa
         - Tries to attach files; logs error but continues if an attachment fails.
         - Supports both STARTTLS (port 587) and standard SSL (usually 465, but configurable).
     """
-    if not config.email_smtp_host:
+    if not config.email_recipient or not config.email_smtp_host:
         logger.warning("Email configuration missing, skipping notification.")
         return False
 
