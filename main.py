@@ -15,7 +15,7 @@ import signal
 from logging_utils import setup_logging
 from file_utils import validate_tool_paths
 from core import queue_worker_loop
-from config import validate_config
+from config import AppConfig
 
 # Global flag for graceful shutdown
 shutdown_requested = False
@@ -72,7 +72,8 @@ def main() -> None:
     signal.signal(signal.SIGINT, signal_handler)
 
     # Validate configuration before starting
-    if not validate_config():
+    config = AppConfig()
+    if not config.validate():
         print("CONFIGURATION_VALIDATION_FAILED - check logs")
         sys.exit(1)
 

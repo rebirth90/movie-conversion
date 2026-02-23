@@ -46,9 +46,9 @@ class AppConfig:
     email_smtp_host: str = "smtp.gmail.com"
     email_smtp_port: int = 587
     email_smtp_ssl: bool = False
-    email_smtp_username: str = "rebirth90@gmail.com"
+    email_smtp_username: str = field(default_factory=lambda: os.getenv("EMAIL_SMTP_USERNAME", ""))
     email_smtp_password: str = field(default_factory=lambda: os.getenv("EMAIL_SMTP_PASSWORD", ""))
-    email_recipient: str = "codrut.butnariu@gmail.com"
+    email_recipient: str = field(default_factory=lambda: os.getenv("EMAIL_RECIPIENT", ""))
 
     # Hardware Encoding Configuration
     vaapi_device: str = "/dev/dri/renderD128" # Kept for backwards compatibility but we are shifting to QSV
@@ -57,15 +57,15 @@ class AppConfig:
     qsv_denoise_level: int = 15
 
     # Character replacement rules for Romanian subtitles
-    replace_rules: List[Tuple[str, str]] = field(default_factory=lambda: [
+    replace_rules: Tuple[Tuple[str, str], ...] = field(default_factory=lambda: (
         ("ș", "s"), ("Ș", "S"), ("Ă", "A"), ("Î", "I"), ("î", "i"),
         ("ă", "a"), ("â", "a"), ("Â", "A"), ("Ş", "S"), ("ţ", "t"),
         ("Ț", "T"), ("ş", "s"), ("Ţ", "T"), ("ț", "t"), ("º", "s"),
         ("ª", "S"), ("ã", "a"), ("þ", "t"), ("Þ", "T"),
-    ])
+    ))
 
     # Valid extensions for files to keep during cleanup
-    valid_extensions: Set[str] = field(default_factory=lambda: {'.mp4', '.srt', '.sub', '.ass', '.sup', '.idx'})
+    valid_extensions: frozenset = field(default_factory=lambda: frozenset({'.mp4', '.srt', '.sub', '.ass', '.sup', '.idx'}))
 
     def __post_init__(self):
         object.__setattr__(self, 'log_general_dir', self.log_dir / "general")
@@ -103,11 +103,14 @@ class AppConfig:
             if not tool_path.exists():
                 errors.append(f"Missing tool {tool_name}: {tool_path}")
 
-        if not Path(self.vaapi_device).exists() and not Path(self.qsv_device).exists():
+        if not Path(self.qsv_device).exists():
             errors.append(f"Hardware device not found at {self.qsv_device}")
 
         if not 1 <= self.global_quality_default <= 51:
             errors.append(f"Invalid quality (must be 1-51): {self.global_quality_default}")
+            
+        if not 0 <= getattr(self, 'qsv_denoise_level', 15) <= 100:
+            errors.append(f"Invalid qsv_denoise_level (must be 0-100): {self.qsv_denoise_level}")
 
         if errors:
             for err in errors:
