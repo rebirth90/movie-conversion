@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 from threading import Lock
 import fcntl
+from contextlib import closing
 from models import JobStatus
 
 logger = logging.getLogger(__name__)
@@ -21,39 +22,39 @@ class DatabaseManager:
     def _init_db(self):
         """Initialize SQLite tables for jobs and encoding profiles."""
         with self._get_connection() as conn:
-            cursor = conn.cursor()
+            with closing(conn.cursor()) as cursor:
             
-            # Job Queue Table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS jobs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    path TEXT UNIQUE NOT NULL,
-                    status TEXT NOT NULL DEFAULT 'PENDING',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            # Heuristics Profiles Table
-            # UNIQUE constraint on (width, height, codec, pix_fmt) 
-            # so we only have one "best" profile for a given set of parameters.
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS encoding_profiles (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    width INTEGER NOT NULL,
-                    height INTEGER NOT NULL,
-                    codec TEXT NOT NULL,
-                    pix_fmt TEXT NOT NULL,
-                    best_bf INTEGER NOT NULL,
-                    best_lad INTEGER NOT NULL,
-                    best_async_depth INTEGER NOT NULL,
-                    success_count INTEGER DEFAULT 1,
-                    last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(width, height, codec, pix_fmt)
-                )
-            """)
-            
-            conn.commit()
+                # Job Queue Table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS jobs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        path TEXT UNIQUE NOT NULL,
+                        status TEXT NOT NULL DEFAULT 'PENDING',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                
+                # Heuristics Profiles Table
+                # UNIQUE constraint on (width, height, codec, pix_fmt) 
+                # so we only have one "best" profile for a given set of parameters.
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS encoding_profiles (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        width INTEGER NOT NULL,
+                        height INTEGER NOT NULL,
+                        codec TEXT NOT NULL,
+                        pix_fmt TEXT NOT NULL,
+                        best_bf INTEGER NOT NULL,
+                        best_lad INTEGER NOT NULL,
+                        best_async_depth INTEGER NOT NULL,
+                        success_count INTEGER DEFAULT 1,
+                        last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(width, height, codec, pix_fmt)
+                    )
+                """)
+                
+                conn.commit()
 
     def _get_connection(self):
         """Get a thread-safe connection to the SQLite DB."""
@@ -75,19 +76,19 @@ class DatabaseManager:
             with open(queue_path, 'r+') as f:
                 # Exclusive lock
                 fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                
-                lines = f.readlines()
-                for line in lines:
-                    path = line.strip()
-                    if path:
-                        self.add_job(path)
-                        
-                # Clear file
-                f.seek(0)
-                f.truncate()
-                
-                # Unlock
-                fcntl.flock(f, fcntl.LOCK_UN)
+                try:
+                    lines = f.readlines()
+                    for line in lines:
+                        path = line.strip()
+                        if path:
+                            self.add_job(path)
+                            
+                    # Clear file
+                    f.seek(0)
+                    f.truncate()
+                finally:
+                    # Unlock
+                    fcntl.flock(f, fcntl.LOCK_UN)
         except BlockingIOError:
             # File is locked by another process
             pass
@@ -96,7 +97,7 @@ class DatabaseManager:
 
     def add_job(self, path: str) -> bool:
         """Add a job to the queue if it doesn't already exist."""
-        with self._lock, self._get_connection() as conn:
+        with self._lock, closing(self._get_connection()) as conn:
             cursor = conn.cursor()
             try:
                 cursor.execute(
@@ -114,7 +115,7 @@ class DatabaseManager:
         Atomically find a PENDING job, mark it as PROCESSING, and return it.
         Returns: (job_id, path) or None if queue is empty.
         """
-        with self._lock, self._get_connection() as conn:
+        with self._lock, closing(self._get_connection()) as conn:
             cursor = conn.cursor()
             # SQLite doesn't have UPDATE ... RETURNING in older versions, 
             # so we SELECT then UPDATE carefully in a transaction.
@@ -138,7 +139,7 @@ class DatabaseManager:
 
     def update_job_status(self, job_id: int, status: str):
         """Update a job's status (e.g., COMPLETED, FAILED)."""
-        with self._lock, self._get_connection() as conn:
+        with self._lock, closing(self._get_connection()) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "UPDATE jobs SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -148,7 +149,7 @@ class DatabaseManager:
 
     def reset_orphaned_jobs(self):
         """Reset jobs that were marked PROCESSING if the worker crashed."""
-        with self._lock, self._get_connection() as conn:
+        with self._lock, closing(self._get_connection()) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "UPDATE jobs SET status = 'PENDING' WHERE status = 'PROCESSING' AND updated_at <= datetime('now', '-60 minutes')"
@@ -162,7 +163,7 @@ class DatabaseManager:
         Get the most aggressive known-safe parameters for the given media type.
         Returns: (bf, lad, async_depth) or None if no heuristic is known.
         """
-        with self._lock, self._get_connection() as conn:
+        with self._lock, closing(self._get_connection()) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT best_bf, best_lad, best_async_depth 
@@ -188,7 +189,7 @@ class DatabaseManager:
         Save the successful parameters for these media characteristics.
         If a profile exists, it overwrites it (assuming recent success = safe fallback state).
         """
-        with self._lock, self._get_connection() as conn:
+        with self._lock, closing(self._get_connection()) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO encoding_profiles 

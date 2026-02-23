@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import List, Tuple, Set
 import logging
 import os
-import os
 
 logger = logging.getLogger(__name__)
 

@@ -489,6 +489,7 @@ def process_subtitle(job_path: Path, cleaned_video_name: str, config: AppConfig)
                 if first_char == '{':
                     new_srt = convert_sub_to_srt(subtitle_file, config)
                     if new_srt:
+                        subtitle_file.unlink(missing_ok=True)
                         subtitle_file = new_srt  # Switch to using the new .srt file
             except Exception as e:
                 logger.warning(f"Failed to check/convert .sub file: {e}")

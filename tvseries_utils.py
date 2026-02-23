@@ -36,6 +36,9 @@ def clean_season_folder_name(season_path: Path):
 
     if season_directory_name:
         new_season_path = season_path.parent / season_directory_name
+        if season_path.resolve() == new_season_path.resolve():
+            return new_season_path
+            
         shutil.move(str(season_path), str(new_season_path))
         return new_season_path
     

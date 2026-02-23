@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import logging
 import time
+import signal
 from pathlib import Path
 from config import AppConfig
 from db_utils import DatabaseManager
@@ -8,17 +9,31 @@ from file_utils import  should_process_path
 from logging_utils import start_job_logging, restore_main_logging
 from email_utils import send_failure_email
 from models import MediaType, MediaFactory, JobStatus, JobContext
+from exceptions import MediaValidationError
 from encoding_utils import IntelQSVStrategy
 from conversion_utils import ProcessingPipeline
 
 logger = logging.getLogger(__name__)
 
+shutdown_requested = False
+
+def signal_handler(signum, frame):
+    """Handle graceful shutdown specifically inside the worker."""
+    global shutdown_requested
+    logger.info("SHUTTING_DOWN_GRACEFULLY (worker will finish current job)")
+    shutdown_requested = True
+
 def queue_worker_loop(poll_interval: int = 60) -> None:
     config = AppConfig()
+    config.setup_directories()
     if not config.validate():
          logger.error("Configuration failed validation. Exiting worker.")
          return
          
+    # Register core.py signal scope
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
     db = DatabaseManager(config.db_path)
 
     logger.info("="*80)
@@ -27,10 +42,9 @@ def queue_worker_loop(poll_interval: int = 60) -> None:
     logger.info(f"Poll_interval: {poll_interval}s")
     logger.info("="*80)
     
-    db.reset_orphaned_jobs()
-
-    while True:
+    while not shutdown_requested:
         try:
+            db.reset_orphaned_jobs()
             db.ingest_text_queue(config.queue_file)
             job_record = db.dequeue_pending_job()
 
@@ -63,7 +77,7 @@ def queue_worker_loop(poll_interval: int = 60) -> None:
                         target_dir = cleaned_path if cleaned_path else job_path
                         
                         episodes = []
-                        for ext in ('.mkv', '.mp4', '.avi', '.m4v'):
+                        for ext in ('.mkv', '.mp4', '.avi', '.m4v', '.MKV', '.MP4', '.AVI', '.M4V'):
                             episodes.extend(target_dir.rglob(f"*{ext}"))
                         
                         for ep in episodes:
@@ -94,7 +108,12 @@ def queue_worker_loop(poll_interval: int = 60) -> None:
                 # ===== END DIRECTORY ROUTING INTERCEPTOR =====
                 
                 # Instantiate MediaItem Domain Model via Factory
-                media_item = MediaFactory.create(media_type, job_path, config)
+                try:
+                    media_item = MediaFactory.create(media_type, job_path, config)
+                except MediaValidationError as e:
+                    logger.error(f"Media validation error for {job_path}: {e}")
+                    db.update_job_status(job_id, JobStatus.REJECTED.value)
+                    continue
                      
                 if not media_item:
                      logger.error(f"Failed to resolve domain model for {job_path}")

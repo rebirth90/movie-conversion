@@ -38,6 +38,10 @@ class ProcessingPipeline:
         if check_path.exists():
             logger.warning(f"TARGET_EXISTS: {check_path.name}. Skipping conversion.")
             self.context.media_item.source_path.unlink(missing_ok=True)
+            # Clean up associated subtitles to prevent orphans
+            for ext in ['.srt', '.sub', '.idx', '.ass']:
+                sub_file = self.context.media_item.source_path.with_suffix(ext)
+                sub_file.unlink(missing_ok=True)
             return check_path.parent
         
         # --- PHASE 1: Subtitle Extraction ---       subtitle_path = self._extract_subtitles()
@@ -181,6 +185,9 @@ class ProcessingPipeline:
         if not self.context.media_item.source_path.exists():
              return final_dir
         
+        # Safely unlink the source video BEFORE removing directories
+        self.context.media_item.source_path.unlink(missing_ok=True)
+        
         if isinstance(self.context.media_item, Movie):
             from movie_utils import cleanup_movie_directory
             cleanup_movie_directory(self.context.media_item.source_path.parent, self.context.config)
@@ -197,8 +204,5 @@ class ProcessingPipeline:
                 self.context.media_item.source_path.parent.parent.rmdir()
             except OSError:
                 pass
-            
-        # Safely unlink the source video only after directory cleanup
-        self.context.media_item.source_path.unlink(missing_ok=True)
             
         return final_dir
