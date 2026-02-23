@@ -11,6 +11,19 @@ logger = logging.getLogger(__name__)
 
 
 
+import shutil
+import time
+
+def linux_mv(source: Path, dest: Path) -> None:
+    """Robust cross-device file move."""
+    try:
+        shutil.move(str(source), str(dest))
+    except (PermissionError, OSError) as e:
+        logger.warning(f"shutil.move failed with {e}, falling back to copy+delete for {source}")
+        time.sleep(1)
+        shutil.copy2(str(source), str(dest))
+        source.unlink(missing_ok=True)
+
 def validate_tool_paths(config: AppConfig) -> bool:
     """Verify all required tools are accessible."""
     

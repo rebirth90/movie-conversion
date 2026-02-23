@@ -73,7 +73,7 @@ def queue_worker_loop(config: AppConfig, shutdown_event, poll_interval: int = 60
                             db.add_job(str(ep.absolute()))
                             logger.info(f"QUEUED_EPISODE: {ep}")
                         
-                        db.update_job_status(job_path_str, JobStatus.COMPLETED)
+                        db.update_job_status(job_id, JobStatus.COMPLETED.value)
                         continue
                         
                     case (True, MediaType.MOVIE):

@@ -176,7 +176,6 @@ class IntelQSVStrategy(EncoderStrategy):
             idx = stream.get('index')
             channels = stream.get('channels', 2)
             lang = stream.get('lang', 'unk')
-            
             builder.add_map(f"0:{idx}")
             builder.add_audio_option(f"-c:a:{i}", "aac")
             builder.add_audio_option(f"-ac:{i}", "2")

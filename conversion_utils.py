@@ -134,7 +134,7 @@ class ProcessingPipeline:
                             newest_log = max(candidates, key=lambda p: p.stat().st_mtime)
                             with open(newest_log, 'r', errors='ignore') as f:
                                 content = f.read().lower()
-                                if any(x in content for x in ["out of memory", "allocation failed", "cannot allocate memory", "mfx_err_memory_alloc"]):
+                                if any(x in content for x in ["mfx_err_memory_alloc", "mfxerr_memory_alloc", "not enough surfaces", "out of memory", "allocation failed", "cannot allocate memory"]):
                                     is_vram = True
                                     
                     if is_vram:
@@ -193,18 +193,19 @@ class ProcessingPipeline:
         
         # Move video
         final_video_path = final_dir / encoded_file.name
-        shutil.move(str(encoded_file), str(final_video_path))
+        from file_utils import linux_mv
+        linux_mv(encoded_file, final_video_path)
         
         # Move subtitle if exists
         if subtitle_file and subtitle_file.exists():
              final_sub_path = final_dir / subtitle_file.name
-             shutil.move(str(subtitle_file), str(final_sub_path))
+             linux_mv(subtitle_file, final_sub_path)
              
              if subtitle_file.suffix.lower() == '.sub':
                  idx_file = subtitle_file.with_suffix('.idx')
                  if idx_file.exists():
                      final_idx_path = final_dir / idx_file.name
-                     shutil.move(str(idx_file), str(final_idx_path))
+                     linux_mv(idx_file, final_idx_path)
              
         # Cleanup original source video to save space
         if not self.context.media_item.source_path.exists():
