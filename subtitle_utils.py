@@ -9,7 +9,7 @@ from charset_normalizer import from_bytes
 import glob
 from langdetect import detect, LangDetectException
 from typing import Tuple, Optional
-from config import REPLACE_RULES, AppConfig
+from config import AppConfig
 import shutil
 
 
@@ -253,27 +253,27 @@ def detect_and_convert_encoding(file_path: Path) -> str:
     content = content.strip()
 
     # Write back as standard UTF-8
-    with open(file_path, 'w', encoding='utf-8') as f:
-        f.write(content)
         
     return content
 
-def character_replace(input_path: Path, output_path: Path) -> None:
+def character_replace(src_file: Path, dst_file: Path, config: AppConfig) -> None:
     try:
-        with open(input_path, 'r', encoding='utf-8') as f:
+        with open(src_file, 'r', encoding='utf-8') as f:
             content = f.read()
 
         total_replacements = 0
 
-        for find, repl in REPLACE_RULES:
+        for find, repl in config.replace_rules:
             count = content.count(find)
             if count > 0:
                 content = content.replace(find, repl)
                 total_replacements += count
                 logger.info("REPLACED: '%s' -> '%s': %d", find, repl, count)
 
-        with open(output_path, 'w', encoding='utf-8') as f:
+        with open(dst_file, 'w', encoding='utf-8') as f:
             f.write(content)
+            
+        logger.info(f"Made {total_replacements} replacements in {dst_file}")
 
     except Exception as e:
         logger.error("ERROR_in_clean_subtitle_file: %s", e)
@@ -495,7 +495,7 @@ def process_subtitle(job_path: Path, cleaned_video_name: str, config: AppConfig)
                 logger.warning(f"Failed to check/convert .sub file: {e}")
 
         # 3. Apply Character Replacement Rules
-        character_replace(subtitle_file, subtitle_file)
+        character_replace(subtitle_file, subtitle_file, config)
     
     return subtitle_file
 

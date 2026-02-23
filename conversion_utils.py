@@ -11,7 +11,7 @@ import time
 from models import JobContext, EncodingTier
 from encoding_utils import execute_process
 from subtitle_utils import process_subtitle
-from exceptions import VideoEncodingError, VRAMExhaustionError
+from exceptions import VideoEncodingError, VRAMExhaustionError, ShutdownRequestedError
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +110,7 @@ class ProcessingPipeline:
         for attempt in tiers:
             if self.context.shutdown_event and self.context.shutdown_event.is_set():
                 logger.info("Shutdown event detected. Breaking encode loop.")
-                raise VideoEncodingError("Shutdown requested during execution.")
+                raise ShutdownRequestedError("Shutdown requested during execution.")
                 
             logger.info(f"ATTEMPT: {attempt.desc} -> bf={attempt.bf}, lad={attempt.lad}")
             

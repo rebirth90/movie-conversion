@@ -21,3 +21,7 @@ class VRAMExhaustionError(VideoEncodingError):
 class MediaValidationError(ConversionError):
     """Raised when media validation fails (e.g., missing stream info)."""
     pass
+
+class ShutdownRequestedError(Exception):
+    """Raised when the process is gracefully scaling down."""
+    pass

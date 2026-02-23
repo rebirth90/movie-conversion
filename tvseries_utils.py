@@ -8,8 +8,11 @@ Handles season folder renaming and episode queueing.
 import logging
 import re
 import shutil
-from db_utils import DatabaseManager
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from db_utils import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +47,7 @@ def clean_season_folder_name(season_path: Path):
     
     return None
 
-def queue_episodes(episode_files: list, db: DatabaseManager) -> int:
+def queue_episodes(episode_files: list, db: 'DatabaseManager') -> int:
     """
     Queue all episode files to the SQLite conversion database.
     Returns the number of successfully queued episodes.

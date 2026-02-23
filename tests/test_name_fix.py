@@ -1,6 +1,8 @@
 import sys
+import re
 
 from pathlib import Path
+from config import AppConfig
 
 # Add the project directory to sys.path so we can import movie_utils
 sys.path.append(str(Path(__file__).parent.parent))
@@ -16,8 +18,9 @@ test_cases = [
     "Movie.With.Year.1999.And.Flags.1080p"
 ]
 
+config = AppConfig()
 print("Running Name Sanitization Tests...\n")
 for filename in test_cases:
     print(f"Original:  {filename}")
-    print(f"Sanitized: {sanitize_movie_name(filename)}")
+    print(f"Sanitized: {sanitize_movie_name(filename, config)}")
     print("-" * 40)

@@ -143,7 +143,7 @@ class Movie(MediaItem):
     def clean_name(self) -> str:
         """Uses domain utility to sanitize the name."""
         try:
-            return sanitize_movie_name(self.source_path.stem)
+            return sanitize_movie_name(self.source_path.stem, self.config)
         except Exception as e:
             logger.warning(f"Error sanitizing movie name {self.source_path.stem}: {e}")
             return self.source_path.stem

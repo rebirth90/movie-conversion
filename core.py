@@ -9,7 +9,7 @@ from file_utils import  should_process_path
 from logging_utils import start_job_logging, restore_main_logging
 from email_utils import send_failure_email
 from models import MediaType, MediaFactory, JobStatus, JobContext
-from exceptions import MediaValidationError
+from exceptions import MediaValidationError, ShutdownRequestedError
 from encoding_utils import IntelQSVStrategy
 from conversion_utils import ProcessingPipeline
 
@@ -127,6 +127,10 @@ def queue_worker_loop(config: AppConfig, shutdown_event, poll_interval: int = 60
                     # Mark successful in DB 
                     db.update_job_status(job_id, JobStatus.COMPLETED.value)
                             
+                except ShutdownRequestedError:
+                    logger.info(f"JOB_SUSPENDED: {job_path} will be automatically requeued on next boot.")
+                    db.update_job_status(job_id, JobStatus.PENDING.value)
+                    continue
                 except Exception as e:
                     logger.exception(f"ERROR_in_job_processing: {e}")
                     db.update_job_status(job_id, JobStatus.FAILED.value)
