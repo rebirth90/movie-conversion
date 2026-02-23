@@ -52,9 +52,9 @@ def send_failure_email(config: AppConfig, subject: str, body: str, attachment_pa
 
         # Connect to SMTP Server
         if config.email_smtp_ssl:
-            server = smtplib.SMTP_SSL(config.email_smtp_host, config.email_smtp_port)
+            server = smtplib.SMTP_SSL(config.email_smtp_host, int(config.email_smtp_port))
         else:
-            server = smtplib.SMTP(config.email_smtp_host, config.email_smtp_port)
+            server = smtplib.SMTP(config.email_smtp_host, int(config.email_smtp_port))
             server.starttls() # Upgrade connection to secure
 
         server.login(config.email_smtp_username, config.email_smtp_password)

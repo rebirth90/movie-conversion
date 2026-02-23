@@ -11,6 +11,7 @@ Usage:
 
 import sys
 import signal
+from dotenv import load_dotenv
 
 from logging_utils import setup_logging
 from file_utils import validate_tool_paths
@@ -67,6 +68,8 @@ def main() -> None:
     Main entry point.
     Runs queue daemon that processes conversion.txt entries.
     """
+    load_dotenv()
+    
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)

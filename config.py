@@ -11,9 +11,7 @@ from pathlib import Path
 from typing import List, Tuple, Set
 import logging
 import os
-from dotenv import load_dotenv
-
-load_dotenv()
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +42,7 @@ class AppConfig:
 
     # Email Configuration
     email_smtp_host: str = field(default_factory=lambda: os.getenv("EMAIL_SMTP_HOST", "smtp.gmail.com"))
-    email_smtp_port: int = field(default_factory=lambda: int(os.getenv("EMAIL_SMTP_PORT", "587")))
+    email_smtp_port: str = field(default_factory=lambda: os.getenv("EMAIL_SMTP_PORT", "587"))
     email_smtp_ssl: bool = field(default_factory=lambda: os.getenv("EMAIL_SMTP_SSL", "False").lower() == "true")
     email_smtp_username: str = field(default_factory=lambda: os.getenv("EMAIL_SMTP_USERNAME", ""))
     email_smtp_password: str = field(default_factory=lambda: os.getenv("EMAIL_SMTP_PASSWORD", ""))
@@ -90,7 +88,11 @@ class AppConfig:
             
         if not self.email_recipient:
             errors.append("Missing EMAIL_RECIPIENT in environment.")
+            
+        if not self.email_smtp_port.isdigit() or not 1 <= int(self.email_smtp_port) <= 65535:
+            errors.append(f"Invalid EMAIL_SMTP_PORT: {self.email_smtp_port}")
 
+        import os
         for path_name, path_val in [
             ("base_movies_root", self.base_movies_root),
             ("base_tvseries_root", self.base_tvseries_root),
@@ -101,9 +103,16 @@ class AppConfig:
         ]:
             if not path_val.exists():
                 errors.append(f"Missing required path {path_name}: {path_val}")
+            elif not path_val.is_dir():
+                errors.append(f"Path {path_name} must be a directory: {path_val}")
+            elif not os.access(path_val, os.W_OK):
+                errors.append(f"Directory {path_name} is not writable: {path_val}")
                 
         if not self.db_path.parent.exists():
             errors.append(f"Missing database directory: {self.db_path.parent}")
+            
+        if not self.queue_file.parent.exists():
+            errors.append(f"Missing queue file directory: {self.queue_file.parent}")
 
         for tool_name, tool_path in [
             ("FFmpeg", self.ffmpeg_path),

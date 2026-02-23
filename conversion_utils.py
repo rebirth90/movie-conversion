@@ -180,8 +180,6 @@ class ProcessingPipeline:
         # Cleanup original source video to save space
         if not self.context.media_item.source_path.exists():
              return final_dir
-             
-        self.context.media_item.source_path.unlink()
         
         if isinstance(self.context.media_item, Movie):
             from movie_utils import cleanup_movie_directory
@@ -199,5 +197,8 @@ class ProcessingPipeline:
                 self.context.media_item.source_path.parent.parent.rmdir()
             except OSError:
                 pass
+            
+        # Safely unlink the source video only after directory cleanup
+        self.context.media_item.source_path.unlink(missing_ok=True)
             
         return final_dir
