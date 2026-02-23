@@ -157,6 +157,15 @@ class DatabaseManager:
             )
             conn.commit()
 
+    def cleanup_old_jobs(self, days: int = 30):
+        """Delete COMPLETED and REJECTED jobs older than `days`."""
+        with self._lock, closing(self._get_connection()) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"DELETE FROM jobs WHERE status IN ('COMPLETED', 'REJECTED') AND updated_at < datetime('now', '-{days} days')"
+            )
+            conn.commit()
+
     # --- Heuristics Methods ---
 
     def get_best_profile(self, width: int, height: int, codec: str, pix_fmt: str) -> Optional[Tuple[int, int, int]]:

@@ -143,7 +143,6 @@ class IntelQSVStrategy(EncoderStrategy):
             stream_info.codec_name in ["hevc", "h264", "vp9"] and 
             stream_info.profile != "high 4:4:4 predictive" and 
             stream_info.profile != "high 10" and
-            abs(aspect_ratio - 1.777) < 0.05 and
             stream_info.width <= 1920
         )
 
@@ -151,6 +150,9 @@ class IntelQSVStrategy(EncoderStrategy):
         builder.add_global_option("-hwaccel", "qsv")
         builder.add_global_option("-qsv_device", self.config.qsv_device)
         builder.add_global_option("-hwaccel_output_format", "qsv")
+        
+        # HDR metadata preservation
+        builder.add_global_option("-map_metadata", "0")
 
         # Smart fallback threading
         if not is_hw_supported:
@@ -219,6 +221,9 @@ class IntelQSVStrategy(EncoderStrategy):
         builder.add_video_option("-preset", "veryslow")
         builder.add_video_option("-global_quality", str(self.config.global_quality_default))
         builder.add_video_option("-b:v", "0")
+        
+        if '10' in stream_info.pix_fmt:
+            builder.add_video_option("-x265-params", "hdr10=1")
         
         # QSV Customizations
         builder.add_video_option("-look_ahead", "1")

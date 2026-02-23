@@ -45,7 +45,7 @@ def queue_worker_loop(config: AppConfig, shutdown_event, poll_interval: int = 60
 
                 # ===== SAFEGUARD: REJECT SEEDING PATHS =====
                 if not should_process_path(job_path):
-                    db.update_job_status(job_path_str, JobStatus.REJECTED)
+                    db.update_job_status(job_id, JobStatus.REJECTED.value)
                     continue
                 # ===== END SAFEGUARD =====
 

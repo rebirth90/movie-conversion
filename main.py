@@ -83,6 +83,10 @@ def main() -> None:
         print("CONFIGURATION_VALIDATION_FAILED - check logs")
         sys.exit(1)
 
+    from db_utils import DatabaseManager
+    db = DatabaseManager(config.db_path)
+    db.cleanup_old_jobs(days=30)
+
     # Always run in queue daemon mode
     process_queue(config)
 

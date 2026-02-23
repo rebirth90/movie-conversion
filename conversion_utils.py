@@ -134,7 +134,7 @@ class ProcessingPipeline:
                             newest_log = max(candidates, key=lambda p: p.stat().st_mtime)
                             with open(newest_log, 'r', errors='ignore') as f:
                                 content = f.read().lower()
-                                if any(x in content for x in ["out of memory", "allocation failed", "cannot allocate memory"]):
+                                if any(x in content for x in ["out of memory", "allocation failed", "cannot allocate memory", "mfx_err_memory_alloc"]):
                                     is_vram = True
                                     
                     if is_vram:
@@ -180,8 +180,12 @@ class ProcessingPipeline:
         from models import Movie, TVEpisode
         
         if isinstance(self.context.media_item, TVEpisode):
-            rel_path = self.context.media_item.source_path.parent.relative_to(self.context.config.base_tvseries_root)
-            final_dir = target_root / rel_path
+            try:
+                rel_path = self.context.media_item.source_path.parent.relative_to(self.context.config.base_tvseries_root)
+                final_dir = target_root / rel_path
+            except ValueError as e:
+                logger.error(f"Relocation failed (outside specific base root): {e}")
+                raise
         else:
             final_dir = target_root / self.context.media_item.clean_name()
             
