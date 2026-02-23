@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 import shutil
 import time
+import os
 
 def linux_mv(source: Path, dest: Path) -> None:
     """Robust cross-device file move."""
@@ -23,6 +24,10 @@ def linux_mv(source: Path, dest: Path) -> None:
         time.sleep(1)
         shutil.copy2(str(source), str(dest))
         source.unlink(missing_ok=True)
+
+def validate_target_root(target_path: Path) -> bool:
+    """Return True if path exists, is a directory, and is writable using os.access(path, os.W_OK)"""
+    return target_path.exists() and target_path.is_dir() and os.access(target_path, os.W_OK)
 
 def validate_tool_paths(config: AppConfig) -> bool:
     """Verify all required tools are accessible."""

@@ -80,7 +80,7 @@ def get_process_log_file(config: AppConfig, movie_name: str) -> Path:
     
     return config.log_ffmpeg_dir / f"{safe_movie_name}_{timestamp}.log"
 
-def start_job_logging(config: AppConfig, job_name: str) -> Path:
+def start_job_logging(config: AppConfig, log_name: str):
     """
     Switch logging to a job-specific file in LOG_GENERAL_DIR.
     Format: LOG_GENERAL_DIR / CleanedName_Date.log
@@ -91,7 +91,7 @@ def start_job_logging(config: AppConfig, job_name: str) -> Path:
     root_logger = logging.getLogger()
     
     # Create new job handler
-    safe_name = re.sub(r'[\\//*?:"<>| ]', "_", job_name)
+    safe_name = re.sub(r'[\\//*?:"<>| ]', "_", log_name)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
     # LOG_GENERAL_DIR should strictly be used for application logic logs
@@ -117,7 +117,7 @@ def start_job_logging(config: AppConfig, job_name: str) -> Path:
     root_logger.addHandler(current_job_handler)
     
     # Log the switch
-    logging.info(f"STARTED_JOB_LOGGING: {job_name} -> {log_file}")
+    logging.info(f"STARTED_JOB_LOGGING: {log_name} -> {log_file}")
     
     return log_file
 

@@ -432,14 +432,14 @@ def convert_sub_to_srt(sub_file: Path, config: AppConfig) -> Optional[Path]:
     
     return None
 
-def process_subtitle(job_path: Path, cleaned_video_name: str, config: AppConfig) -> Optional[Path]:
+def process_subtitle(source_path: Path, clean_name: str, config: AppConfig):
     """
     Handle subtitle extraction/discovery and conversion (UTF-8, character replacement).
     SAFEGUARD: Skips text processing if .idx file exists (VobSub).
     Returns path to the processed subtitle file, or None if failed.
     """
-    output_dir = job_path.parent
-    subtitle_file, language, extension = find_or_extract_subtitle(job_path, cleaned_video_name, output_dir, config)
+    output_dir = source_path.parent
+    subtitle_file, language, extension = find_or_extract_subtitle(source_path, clean_name, output_dir, config)
 
     if not subtitle_file:
         return None

@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from db_utils import DatabaseManager
+    from config import AppConfig
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,19 @@ def clean_season_folder_name(season_path: Path):
         return new_season_path
     
     return None
+
+def process_tv_series_directory(dir_path: Path, config: 'AppConfig', db) -> bool:
+    target_dir = clean_season_folder_name(dir_path) or dir_path
+    
+    episodes = []
+    for ext in ('.mkv', '.mp4', '.avi', '.m4v', '.MKV', '.MP4', '.AVI', '.M4V'):
+        episodes.extend(target_dir.rglob(f"*{ext}"))
+    
+    for ep in episodes:
+        db.add_job(str(ep.absolute()))
+        logger.info(f"QUEUED_EPISODE: {ep}")
+        
+    return True
 
 def sanitize_tvseries_name(filename: str) -> str:
     """

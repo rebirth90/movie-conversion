@@ -30,6 +30,12 @@ def queue_worker_loop(config: AppConfig, shutdown_event, poll_interval: int = 60
 
     while not shutdown_event.is_set():
         try:
+            from file_utils import validate_target_root
+            if not validate_target_root(config.base_movies_root) and not validate_target_root(config.base_tvseries_root):
+                logger.critical("Both target roots are inaccessible. Waiting for mount...")
+                time.sleep(60)
+                continue
+
             current_time = time.time()
             if current_time - last_reset_time > 300: # 5 minutes
                 db.reset_orphaned_jobs()
@@ -62,18 +68,8 @@ def queue_worker_loop(config: AppConfig, shutdown_event, poll_interval: int = 60
                 # ===== DIRECTORY ROUTING INTERCEPTOR =====
                 match (job_path.is_dir(), media_type):
                     case (True, MediaType.TVSERIES):
-                        from tvseries_utils import clean_season_folder_name
-                        # clean_season_folder_name physically renames the folder and returns the new Path
-                        target_dir = clean_season_folder_name(job_path) or job_path
-                        
-                        episodes = []
-                        for ext in ('.mkv', '.mp4', '.avi', '.m4v', '.MKV', '.MP4', '.AVI', '.M4V'):
-                            episodes.extend(target_dir.rglob(f"*{ext}"))
-                        
-                        for ep in episodes:
-                            db.add_job(str(ep.absolute()))
-                            logger.info(f"QUEUED_EPISODE: {ep}")
-                        
+                        from tvseries_utils import process_tv_series_directory
+                        process_tv_series_directory(job_path, config, db)
                         db.update_job_status(job_id, JobStatus.COMPLETED.value)
                         continue
                         
@@ -105,6 +101,10 @@ def queue_worker_loop(config: AppConfig, shutdown_event, poll_interval: int = 60
                     logger.error(f"Media validation error for {job_path}: {e}")
                     db.update_job_status(job_id, JobStatus.REJECTED.value)
                     continue
+                except ValueError as e:
+                    logger.warning(f"Skipping invalid media file {job_path}: {e}")
+                    db.update_job_status(job_id, JobStatus.REJECTED.value)
+                    continue
                      
                 if not media_item:
                      logger.error(f"Failed to resolve domain model for {job_path}")
@@ -126,8 +126,7 @@ def queue_worker_loop(config: AppConfig, shutdown_event, poll_interval: int = 60
                     result = pipeline.run()
                     if not result:
                         logger.error(f"Pipeline returned False/failed for {job_path}, moving on.")
-                        # db update should happen inside pipeline, or here. 
-                        # Pipeline handles its own FAILED state inline where needed.
+                        db.update_job_status(job_id, JobStatus.FAILED.value)
                         continue
                             
                     # Mark successful in DB 

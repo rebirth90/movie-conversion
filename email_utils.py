@@ -10,7 +10,7 @@ from config import AppConfig
 
 logger = logging.getLogger(__name__)
 
-def send_failure_email(config: AppConfig, subject: str, body: str, attachment_paths: Optional[List[Path]] = None) -> bool:
+def send_failure_email(config: AppConfig, subject: str, body: str, attachment_paths: list = None):
     """
     Send an email notification via SMTP with optional file attachments.
     

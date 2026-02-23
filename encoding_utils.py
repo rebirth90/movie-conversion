@@ -146,6 +146,9 @@ class IntelQSVStrategy(EncoderStrategy):
             stream_info.width <= 1920
         )
 
+        if stream_info.width > 1920:
+            logger.warning("4K source detected. Forcing Hybrid Software Decode to perform 1080p downscale.")
+
         # Base hwaccel options
         builder.add_global_option("-hwaccel", "qsv")
         builder.add_global_option("-qsv_device", self.config.qsv_device)

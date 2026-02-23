@@ -9,7 +9,7 @@ from metadata_utils import search_movie_tmdb
 
 logger = logging.getLogger(__name__)
 
-def cleanup_movie_directory(directory: Path, config: AppConfig) -> None:
+def cleanup_movie_directory(directory: Path, config: AppConfig):
     """
     Clean up movie directory after conversion.
     
