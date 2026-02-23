@@ -185,6 +185,7 @@ class ProcessingPipeline:
             try:
                 rel_path = self.context.media_item.source_path.parent.relative_to(self.context.config.base_tvseries_root)
                 final_dir = target_root / rel_path
+                final_dir.mkdir(parents=True, exist_ok=True)
             except ValueError as e:
                 logger.error(f"Relocation failed (outside specific base root): {e}")
                 from models import JobStatus
@@ -195,10 +196,10 @@ class ProcessingPipeline:
                 final_dir = self.context.config.target_movies_dir / self.context.media_item.clean_name()
             else:
                 final_dir = target_root / self.context.media_item.clean_name()
+            final_dir.mkdir(parents=True, exist_ok=True)
         else:
             final_dir = target_root / self.context.media_item.clean_name()
-            
-        final_dir.mkdir(parents=True, exist_ok=True)
+            final_dir.mkdir(parents=True, exist_ok=True)
         
         # Move video
         final_video_path = final_dir / encoded_file.name

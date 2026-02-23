@@ -12,10 +12,11 @@ from models import MediaType, MediaFactory, JobStatus, JobContext
 from exceptions import MediaValidationError, ShutdownRequestedError
 from encoding_utils import IntelQSVStrategy
 from conversion_utils import ProcessingPipeline
+import threading
 
 logger = logging.getLogger(__name__)
 
-def queue_worker_loop(config: AppConfig, shutdown_event, poll_interval: int = 60) -> None:
+def queue_worker_loop(config: AppConfig, shutdown_event: threading.Event, poll_interval: int = 60) -> None:
 
     db = DatabaseManager(config.db_path)
 
@@ -31,13 +32,13 @@ def queue_worker_loop(config: AppConfig, shutdown_event, poll_interval: int = 60
     while not shutdown_event.is_set():
         try:
             from file_utils import validate_target_root
-            if not validate_target_root(config.base_movies_root) and not validate_target_root(config.base_tvseries_root):
+            if not validate_target_root(config.base_movies_root) or not validate_target_root(config.base_tvseries_root):
                 logger.critical("Both source roots are inaccessible. Waiting for mount...")
                 time.sleep(60)
                 continue
                 
-            if not validate_target_root(config.target_movies_dir) and not validate_target_root(config.target_tvseries_dir):
-                logger.critical("Both target archive directories are inaccessible. Waiting for mount...")
+            if not validate_target_root(config.target_movies_dir) or not validate_target_root(config.target_tvseries_dir):
+                logger.critical("Archive targets are inaccessible. Sleeping 60s...")
                 time.sleep(60)
                 continue
 
