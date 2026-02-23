@@ -252,7 +252,7 @@ def execute_process(args: List[str], wait_for_completion: bool = True, config: A
             proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         
         if not wait_for_completion:
-            return proc
+            return proc, log_file
             
         _, stderr = proc.communicate()
         if proc.returncode != 0:

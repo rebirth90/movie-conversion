@@ -17,14 +17,15 @@ from logging_utils import setup_logging
 from file_utils import validate_tool_paths
 from core import queue_worker_loop
 from config import AppConfig
+import threading
 
 # Global flag for graceful shutdown
-shutdown_requested = False
+shutdown_event = threading.Event()
 
 
 def signal_handler(signum, frame):
     """Handle graceful shutdown on SIGTERM/SIGINT."""
-    global shutdown_requested
+    global shutdown_event
     
     # 1. Try to get the logger (console only) - no file output for signal handler
     logger = setup_logging()
@@ -38,8 +39,7 @@ def signal_handler(signum, frame):
         print(f"SIGNAL_RECEIVED: {signal.Signals(signum).name}")
         print("SHUTTING_DOWN_GRACEFULLY (logging failed)")
 
-    shutdown_requested = True
-    sys.exit(0)
+    shutdown_event.set()
 
 
 def process_queue() -> None:
@@ -55,7 +55,7 @@ def process_queue() -> None:
             logger.error("REQUIRED_TOOLS_MISSING")
             return
 
-        queue_worker_loop(poll_interval=60)
+        queue_worker_loop(config, shutdown_event, poll_interval=60)
     except KeyboardInterrupt:
         logger.info("QUEUE_WORKER_INTERRUPTED")
     except Exception as e:
@@ -70,6 +70,8 @@ def main() -> None:
     """
     load_dotenv()
     
+    global shutdown_event
+    
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
@@ -82,7 +84,7 @@ def main() -> None:
         sys.exit(1)
 
     # Always run in queue daemon mode
-    process_queue()
+    process_queue(config)
 
 
 if __name__ == "__main__":

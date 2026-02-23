@@ -91,7 +91,6 @@ class AppConfig:
         if not self.email_smtp_port.isdigit() or not 1 <= int(self.email_smtp_port) <= 65535:
             errors.append(f"Invalid EMAIL_SMTP_PORT: {self.email_smtp_port}")
 
-        import os
         for path_name, path_val in [
             ("base_movies_root", self.base_movies_root),
             ("base_tvseries_root", self.base_tvseries_root),

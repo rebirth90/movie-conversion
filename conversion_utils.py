@@ -44,7 +44,8 @@ class ProcessingPipeline:
                 sub_file.unlink(missing_ok=True)
             return check_path.parent
         
-        # --- PHASE 1: Subtitle Extraction ---       subtitle_path = self._extract_subtitles()
+        # --- PHASE 1: Subtitle Extraction ---
+        subtitle_path = self._extract_subtitles()
         
         # 2. Encode Video
         encoded_file = self._encode_video_with_heuristics()
@@ -76,6 +77,7 @@ class ProcessingPipeline:
         Executes hardware encode using tiered memory logic from DatabaseManager heuristics.
         Steps down smoothly upon VRAMExhaustionError.
         """
+        from main import shutdown_event
         logger.info("-- PHASE: Video Encoding --")
         # Define base tiers
         tiers = [
@@ -107,6 +109,10 @@ class ProcessingPipeline:
         temp_output = self.context.media_item.source_path.with_name(f"{self.context.media_item.clean_name()}_converted.mp4")
 
         for attempt in tiers:
+            if shutdown_event.is_set():
+                logger.info("Shutdown event detected. Breaking encode loop.")
+                raise VideoEncodingError("Shutdown requested during execution.")
+                
             logger.info(f"ATTEMPT: {attempt.desc} -> bf={attempt.bf}, lad={attempt.lad}")
             
             builder = self.context.strategy.build_command(
@@ -119,7 +125,23 @@ class ProcessingPipeline:
             try:
                 proc = execute_process(cmd, wait_for_completion=True, config=self.context.config, log_name=self.context.media_item.clean_name())
                 if proc is None:
-                    raise VRAMExhaustionError("Process returned None (Likely VRAM crash)")
+                    # Check recent log for memory strings
+                    import glob
+                    is_vram = False
+                    if self.context.config.log_ffmpeg_dir.exists():
+                        safe_log_name = glob.escape(self.context.media_item.clean_name())
+                        candidates = list(self.context.config.log_ffmpeg_dir.glob(f"*{safe_log_name}*.log"))
+                        if candidates:
+                            newest_log = max(candidates, key=lambda p: p.stat().st_mtime)
+                            with open(newest_log, 'r', errors='ignore') as f:
+                                content = f.read().lower()
+                                if any(x in content for x in ["out of memory", "allocation failed", "cannot allocate memory"]):
+                                    is_vram = True
+                                    
+                    if is_vram:
+                        raise VRAMExhaustionError("Process returned None (Likely VRAM crash)")
+                    else:
+                        raise VideoEncodingError("Process returned None (Generic FFmpeg crash)")
                 
                 # Verify file
                 if not temp_output.exists() or temp_output.stat().st_size < 1000:

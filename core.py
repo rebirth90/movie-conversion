@@ -15,24 +15,7 @@ from conversion_utils import ProcessingPipeline
 
 logger = logging.getLogger(__name__)
 
-shutdown_requested = False
-
-def signal_handler(signum, frame):
-    """Handle graceful shutdown specifically inside the worker."""
-    global shutdown_requested
-    logger.info("SHUTTING_DOWN_GRACEFULLY (worker will finish current job)")
-    shutdown_requested = True
-
-def queue_worker_loop(poll_interval: int = 60) -> None:
-    config = AppConfig()
-    config.setup_directories()
-    if not config.validate():
-         logger.error("Configuration failed validation. Exiting worker.")
-         return
-         
-    # Register core.py signal scope
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
+def queue_worker_loop(config: AppConfig, shutdown_event, poll_interval: int = 60) -> None:
 
     db = DatabaseManager(config.db_path)
 
@@ -41,10 +24,17 @@ def queue_worker_loop(poll_interval: int = 60) -> None:
     logger.info(f"SQLite DB: {db.db_path}")
     logger.info(f"Poll_interval: {poll_interval}s")
     logger.info("="*80)
+    logger.info("="*80)
     
-    while not shutdown_requested:
+    last_reset_time = 0
+
+    while not shutdown_event.is_set():
         try:
-            db.reset_orphaned_jobs()
+            current_time = time.time()
+            if current_time - last_reset_time > 300: # 5 minutes
+                db.reset_orphaned_jobs()
+                last_reset_time = current_time
+                
             db.ingest_text_queue(config.queue_file)
             job_record = db.dequeue_pending_job()
 
@@ -172,9 +162,9 @@ def queue_worker_loop(poll_interval: int = 60) -> None:
                     # Restore logging to main file
                     restore_main_logging()
 
-        except KeyboardInterrupt:
-            logger.info("WORKER_INTERRUPTED_BY_USER")
-            break
+            else:
+                time.sleep(poll_interval)
+
         except Exception as e:
             logger.exception("ERROR_in_worker_loop")
             time.sleep(poll_interval)
