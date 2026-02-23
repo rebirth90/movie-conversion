@@ -41,7 +41,7 @@ def get_audio_streams(movie_file: Path, config: AppConfig) -> List[dict]:
         for stream in probe_data.get("streams", []):
             index = stream.get("index")
             channels = stream.get("channels", 2)
-            lang = stream.get("tags", {}).get("language", "unk").lower()
+            lang = stream.get("tags", {}).get("language", "und").lower()
             audio_streams.append({"index": index, "channels": channels, "lang": lang})
 
         return audio_streams
@@ -139,11 +139,17 @@ class IntelQSVStrategy(EncoderStrategy):
 
         aspect_ratio = stream_info.width / stream_info.height
         # Note: AV1, VC1, MPEG2, and VP8 deliberately fall to hybrid mode based on Gen9.5 capabilities.
+        profile_lower = str(stream_info.profile or "").lower()
         is_hw_supported = (
-            stream_info.codec_name in ["hevc", "h264", "vp9"] and 
-            stream_info.profile != "high 4:4:4 predictive" and 
-            stream_info.profile != "high 10" and
-            stream_info.width <= 1920
+            stream_info.codec_name in ["hevc", "h264", "vp9"] and
+            stream_info.codec_name != "av1" and
+            "high 4:4:4" not in profile_lower and
+            "high 10" not in profile_lower and
+            "10" not in stream_info.pix_fmt and
+            "444" not in stream_info.pix_fmt and
+            "422" not in stream_info.pix_fmt and
+            stream_info.width <= 1920 and
+            stream_info.height <= 1080
         )
 
         if stream_info.width > 1920:
@@ -155,7 +161,7 @@ class IntelQSVStrategy(EncoderStrategy):
         builder.add_global_option("-hwaccel_output_format", "qsv")
         
         # HDR metadata preservation
-        builder.add_global_option("-map_metadata", "0")
+        builder.add_video_option("-map_metadata", "0")
 
         # Smart fallback threading
         if not is_hw_supported:
@@ -169,16 +175,16 @@ class IntelQSVStrategy(EncoderStrategy):
 
         # Standard maps
         builder.add_map("0:v:0")
-        builder.add_global_option("-map_chapters", "-1")
-        builder.add_global_option("-sn")
-        builder.add_global_option("-dn")
+        builder.add_video_option("-map_chapters", "-1")
+        builder.add_video_option("-sn")
+        builder.add_video_option("-dn")
         
         # Audio mapping
         audio_streams = get_audio_streams(media_item.source_path, self.config)
         for i, stream in enumerate(audio_streams):
             idx = stream.get('index')
             channels = stream.get('channels', 2)
-            lang = stream.get('lang', 'unk')
+            lang = stream.get('lang', 'und')
             builder.add_map(f"0:{idx}")
             builder.add_audio_option(f"-c:a:{i}", "aac")
             builder.add_audio_option(f"-ac:{i}", "2")
@@ -193,11 +199,13 @@ class IntelQSVStrategy(EncoderStrategy):
         if not is_hw_supported and (stream_info.width != 1920 or stream_info.height != 1080):
             pad_filter = "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2"
             builder.add_filter(pad_filter)
-            builder.add_filter("format=p010,hwupload=extra_hw_frames=32")
+            sw_fmt = "p010le" if ('10' in stream_info.pix_fmt or 'p010' in stream_info.pix_fmt) else "nv12"
+            builder.add_filter(f"format={sw_fmt},hwupload=extra_hw_frames=32")
         elif not is_hw_supported:
-            builder.add_filter("format=p010,hwupload=extra_hw_frames=32")
+            sw_fmt = "p010le" if ('10' in stream_info.pix_fmt or 'p010' in stream_info.pix_fmt) else "nv12"
+            builder.add_filter(f"format={sw_fmt},hwupload=extra_hw_frames=32")
         else:
-            hw_format = "p010" # Forced 10-bit Squeeze
+            hw_format = "p010le" if ('10' in stream_info.pix_fmt or 'p010' in stream_info.pix_fmt) else "nv12"
             w_h = ""
             if stream_info.width != 1920 or stream_info.height != 1080:
                  w_h = ":w=1920:h=1080"
@@ -218,14 +226,12 @@ class IntelQSVStrategy(EncoderStrategy):
 
         # --- ENCODER OPTIONS ---
         builder.add_video_option("-c:v", "hevc_qsv")
-        builder.add_video_option("-profile:v", "main10") # Forced Squeeze
+        enc_profile = "main10" if ('10' in stream_info.pix_fmt or 'p010' in stream_info.pix_fmt) else "main"
+        builder.add_video_option("-profile:v", enc_profile)
         builder.add_video_option("-level:v", "5.1")
         builder.add_video_option("-preset", "veryslow")
         builder.add_video_option("-global_quality", str(self.config.global_quality_default))
         builder.add_video_option("-b:v", "0")
-        
-        if '10' in stream_info.pix_fmt:
-            builder.add_video_option("-x265-params", "hdr10=1")
         
         # QSV Customizations
         builder.add_video_option("-look_ahead", "1")
