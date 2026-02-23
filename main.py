@@ -42,7 +42,7 @@ def signal_handler(signum, frame):
     shutdown_event.set()
 
 
-def process_queue() -> None:
+def process_queue(config: AppConfig) -> None:
     """Run queue worker daemon."""
     # Console only logging for startup/idle - no file output for queue worker
     logger = setup_logging()

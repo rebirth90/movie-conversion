@@ -77,7 +77,6 @@ class ProcessingPipeline:
         Executes hardware encode using tiered memory logic from DatabaseManager heuristics.
         Steps down smoothly upon VRAMExhaustionError.
         """
-        from main import shutdown_event
         logger.info("-- PHASE: Video Encoding --")
         # Define base tiers
         tiers = [
@@ -109,7 +108,7 @@ class ProcessingPipeline:
         temp_output = self.context.media_item.source_path.with_name(f"{self.context.media_item.clean_name()}_converted.mp4")
 
         for attempt in tiers:
-            if shutdown_event.is_set():
+            if self.context.shutdown_event and self.context.shutdown_event.is_set():
                 logger.info("Shutdown event detected. Breaking encode loop.")
                 raise VideoEncodingError("Shutdown requested during execution.")
                 

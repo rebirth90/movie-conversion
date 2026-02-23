@@ -21,40 +21,41 @@ class DatabaseManager:
 
     def _init_db(self):
         """Initialize SQLite tables for jobs and encoding profiles."""
-        with self._get_connection() as conn:
-            with closing(conn.cursor()) as cursor:
-            
-                # Job Queue Table
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS jobs (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        path TEXT UNIQUE NOT NULL,
-                        status TEXT NOT NULL DEFAULT 'PENDING',
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """)
+        with closing(self._get_connection()) as conn:
+            with conn:
+                with closing(conn.cursor()) as cursor:
                 
-                # Heuristics Profiles Table
-                # UNIQUE constraint on (width, height, codec, pix_fmt) 
-                # so we only have one "best" profile for a given set of parameters.
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS encoding_profiles (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        width INTEGER NOT NULL,
-                        height INTEGER NOT NULL,
-                        codec TEXT NOT NULL,
-                        pix_fmt TEXT NOT NULL,
-                        best_bf INTEGER NOT NULL,
-                        best_lad INTEGER NOT NULL,
-                        best_async_depth INTEGER NOT NULL,
-                        success_count INTEGER DEFAULT 1,
-                        last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        UNIQUE(width, height, codec, pix_fmt)
-                    )
-                """)
-                
-                conn.commit()
+                    # Job Queue Table
+                    cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS jobs (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            path TEXT UNIQUE NOT NULL,
+                            status TEXT NOT NULL DEFAULT 'PENDING',
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                    """)
+                    
+                    # Heuristics Profiles Table
+                    # UNIQUE constraint on (width, height, codec, pix_fmt) 
+                    # so we only have one "best" profile for a given set of parameters.
+                    cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS encoding_profiles (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            width INTEGER NOT NULL,
+                            height INTEGER NOT NULL,
+                            codec TEXT NOT NULL,
+                            pix_fmt TEXT NOT NULL,
+                            best_bf INTEGER NOT NULL,
+                            best_lad INTEGER NOT NULL,
+                            best_async_depth INTEGER NOT NULL,
+                            success_count INTEGER DEFAULT 1,
+                            last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            UNIQUE(width, height, codec, pix_fmt)
+                        )
+                    """)
+                    
+                    conn.commit()
 
     def _get_connection(self):
         """Get a thread-safe connection to the SQLite DB."""

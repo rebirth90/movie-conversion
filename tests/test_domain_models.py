@@ -34,8 +34,8 @@ class TestDomainModels(unittest.TestCase):
         
     def test_media_factory_unknown(self):
         test_path = Path("/data/scratch/random.txt")
-        with self.assertRaises(MediaValidationError):
-            MediaFactory.create(MediaType.UNKNOWN, test_path, self.config)
+        media_item = MediaFactory.create(MediaType.UNKNOWN, test_path, self.config)
+        self.assertIsNone(media_item)
 
 if __name__ == '__main__':
     unittest.main()

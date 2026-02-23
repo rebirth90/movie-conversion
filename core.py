@@ -118,7 +118,7 @@ def queue_worker_loop(config: AppConfig, shutdown_event, poll_interval: int = 60
                 try:
                     # Assemble Context, Strategy and Pipeline
                     strategy = IntelQSVStrategy(config)
-                    context = JobContext(config=config, db=db, media_item=media_item, strategy=strategy)
+                    context = JobContext(config=config, db=db, media_item=media_item, strategy=strategy, shutdown_event=shutdown_event)
                     pipeline = ProcessingPipeline(context)
                     
                     # Execute

@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from db_utils import DatabaseManager
     from encoding_utils import EncoderStrategy
+    import threading
 
 from exceptions import MediaValidationError
 from config import AppConfig
@@ -108,6 +109,7 @@ class JobContext:
     db: 'DatabaseManager'
     media_item: 'MediaItem'
     strategy: 'EncoderStrategy'
+    shutdown_event: Optional['threading.Event'] = None
 
 
 class MediaItem(ABC):
