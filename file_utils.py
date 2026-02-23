@@ -40,27 +40,12 @@ def validate_tool_paths(config: AppConfig) -> bool:
 
 
 
-def should_process_path(linux_path: Path, config: AppConfig) -> bool:
+def should_process_path(linux_path: Path) -> bool:
     """
-    Validate path is within BASE_MOVIES_ROOT or BASE_TVSERIES_ROOT.
     Reject paths that start with /share/seeding.
     """
     path_str = str(linux_path).strip()
-    
-    # Reject seeding paths explicitly
     if path_str.startswith("/share/seeding"):
-        logger.warning("PATH_REJECTED (seeding path): %s", linux_path)
+        logger.warning(f"PATH_REJECTED (seeding path): {linux_path}")
         return False
-    
-    # Check if it's a TV series path
-    if path_str.startswith(str(config.base_tvseries_root)):
-        logger.info("PATH_ACCEPTED (TV_SERIES): %s", linux_path)
-        return True
-    
-    # Check if it's a movie path
-    if path_str.startswith(str(config.base_movies_root)):
-        logger.info("PATH_ACCEPTED (MOVIE): %s", linux_path)
-        return True
-    
-    logger.warning("PATH_REJECTED (not in movies or tv-series): %s", linux_path)
-    return False
+    return True

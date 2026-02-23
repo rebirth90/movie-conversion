@@ -169,7 +169,13 @@ class MediaFactory:
     def create(media_type: MediaType, source_path: Path, config: AppConfig) -> Optional[MediaItem]:
         match media_type:
             case MediaType.MOVIE:
-                return Movie(source_path, config)
+                if source_path.is_dir():
+                    from movie_utils import get_largest_movie_file
+                    actual_file = get_largest_movie_file(source_path)
+                    if not actual_file:
+                        raise ValueError(f"No valid video file found in directory: {source_path}")
+                    source_path = actual_file
+                return Movie(source_path=source_path, config=config)
             case MediaType.TVSERIES:
                 return TVEpisode(source_path, config)
             case _:

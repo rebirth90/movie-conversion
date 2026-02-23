@@ -44,9 +44,8 @@ def queue_worker_loop(config: AppConfig, shutdown_event, poll_interval: int = 60
                 job_path = Path(job_path_str)
 
                 # ===== SAFEGUARD: REJECT SEEDING PATHS =====
-                if not should_process_path(job_path, config):
-                    logger.error("🚫 JOB_REJECTED: Path validation failed")
-                    db.update_job_status(job_id, JobStatus.REJECTED.value)
+                if not should_process_path(job_path):
+                    db.update_job_status(job_path_str, JobStatus.REJECTED)
                     continue
                 # ===== END SAFEGUARD =====
 
@@ -63,8 +62,8 @@ def queue_worker_loop(config: AppConfig, shutdown_event, poll_interval: int = 60
                 match (job_path.is_dir(), media_type):
                     case (True, MediaType.TVSERIES):
                         from tvseries_utils import clean_season_folder_name
-                        cleaned_path = clean_season_folder_name(job_path)
-                        target_dir = cleaned_path if cleaned_path else job_path
+                        # clean_season_folder_name physically renames the folder and returns the new Path
+                        target_dir = clean_season_folder_name(job_path) or job_path
                         
                         episodes = []
                         for ext in ('.mkv', '.mp4', '.avi', '.m4v', '.MKV', '.MP4', '.AVI', '.M4V'):
@@ -73,7 +72,8 @@ def queue_worker_loop(config: AppConfig, shutdown_event, poll_interval: int = 60
                         for ep in episodes:
                             db.add_job(str(ep.absolute()))
                             logger.info(f"QUEUED_EPISODE: {ep}")
-                        db.update_job_status(job_id, JobStatus.COMPLETED.value)
+                        
+                        db.update_job_status(job_path_str, JobStatus.COMPLETED)
                         continue
                         
                     case (True, MediaType.MOVIE):
