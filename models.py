@@ -31,6 +31,8 @@ class VideoStreamInfo:
     codec_name: str
     profile: str
     pix_fmt: str
+    master_display: str = ""
+    max_cll: str = ""
     
     @classmethod
     def from_file(cls, filepath: Path, config: 'AppConfig') -> 'VideoStreamInfo':
@@ -44,7 +46,7 @@ class VideoStreamInfo:
                     "-select_streams",
                     "v:0",
                     "-show_entries",
-                    "stream=codec_name,profile,width,height,pix_fmt",
+                    "stream=codec_name,profile,width,height,pix_fmt:stream_side_data=red_x,red_y,green_x,green_y,blue_x,blue_y,white_point_x,white_point_y,min_luminance,max_luminance,max_content,max_average",
                     "-of",
                     "json",
                     str(filepath),
@@ -68,15 +70,38 @@ class VideoStreamInfo:
             profile = track.get("profile", "unknown")
             pix_fmt = track.get("pix_fmt", "unknown")
 
-            if not width or not height:
+            if not width or height is None:
                 raise MediaValidationError(f"Missing width/height in {filepath}")
+                
+            master_display = ""
+            max_cll = ""
+            for side in track.get("side_data_list", []):
+                if 'red_x' in side and 'green_x' in side and 'blue_x' in side and 'white_point_x' in side:
+                    try:
+                        rx = side['red_x'].split('/')[0]
+                        ry = side['red_y'].split('/')[0]
+                        gx = side['green_x'].split('/')[0]
+                        gy = side['green_y'].split('/')[0]
+                        bx = side['blue_x'].split('/')[0]
+                        by = side['blue_y'].split('/')[0]
+                        wpx = side['white_point_x'].split('/')[0]
+                        wpy = side['white_point_y'].split('/')[0]
+                        minL = side['min_luminance'].split('/')[0]
+                        maxL = side['max_luminance'].split('/')[0]
+                        master_display = f"G({gx},{gy})B({bx},{by})R({rx},{ry})WP({wpx},{wpy})L({maxL},{minL})"
+                    except Exception:
+                        pass
+                if 'max_content' in side and 'max_average' in side:
+                    max_cll = f"{side['max_content']},{side['max_average']}"
 
             return cls(
                 width=int(width),
                 height=int(height),
                 codec_name=str(codec_name).lower(),
                 profile=str(profile).lower(),
-                pix_fmt=str(pix_fmt).lower()
+                pix_fmt=str(pix_fmt).lower(),
+                master_display=master_display,
+                max_cll=max_cll
             )
         except Exception as e:
             if isinstance(e, MediaValidationError):
@@ -109,6 +134,7 @@ class JobContext:
     db: 'DatabaseManager'
     media_item: 'MediaItem'
     strategy: 'EncoderStrategy'
+    job_id: int
     shutdown_event: Optional['threading.Event'] = None
 
 

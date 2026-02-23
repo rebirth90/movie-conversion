@@ -52,7 +52,9 @@ class ProcessingPipeline:
         
         # 3. Relocate
         final_dir = self._relocate(encoded_file, subtitle_path)
-        
+        if not final_dir:
+            return False
+            
         logger.info(f"=== PIPELINE SUCCESS: {final_dir} ===")
         return final_dir
 
@@ -185,7 +187,9 @@ class ProcessingPipeline:
                 final_dir = target_root / rel_path
             except ValueError as e:
                 logger.error(f"Relocation failed (outside specific base root): {e}")
-                raise
+                from models import JobStatus
+                self.context.db.update_job_status(self.context.job_id, JobStatus.FAILED.value)
+                return False
         else:
             final_dir = target_root / self.context.media_item.clean_name()
             

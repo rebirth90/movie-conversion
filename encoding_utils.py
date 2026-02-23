@@ -256,7 +256,8 @@ def execute_process(args: List[str], wait_for_completion: bool = True, config: A
             proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         
         if not wait_for_completion:
-            return proc, log_file
+            proc.log_file = log_file
+            return proc
             
         _, stderr = proc.communicate()
         if proc.returncode != 0:
@@ -264,12 +265,15 @@ def execute_process(args: List[str], wait_for_completion: bool = True, config: A
                 logger.error(f"Command failed. Check log at: {log_file_path}")
             else:
                 logger.error(f"Command failed: {stderr}")
+            if log_file:
+                log_file.close()
             return None
             
+        if log_file:
+            log_file.close()
         return proc
     except Exception as e:
-        logger.error(f"Subprocess Execution Error: {e}")
-        return None
-    finally:
-        if wait_for_completion and log_file:
+        if log_file:
             log_file.close()
+        logger.error(f"Failed to execute process: {e}")
+        return None

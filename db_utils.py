@@ -162,7 +162,8 @@ class DatabaseManager:
         with self._lock, closing(self._get_connection()) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                f"DELETE FROM jobs WHERE status IN ('COMPLETED', 'REJECTED') AND updated_at < datetime('now', '-{days} days')"
+                "DELETE FROM jobs WHERE status IN ('COMPLETED', 'REJECTED') AND updated_at < datetime('now', '-' || ? || ' days')",
+                (days,)
             )
             conn.commit()
 

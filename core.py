@@ -33,6 +33,7 @@ def queue_worker_loop(config: AppConfig, shutdown_event, poll_interval: int = 60
             current_time = time.time()
             if current_time - last_reset_time > 300: # 5 minutes
                 db.reset_orphaned_jobs()
+                db.cleanup_old_jobs(days=30)
                 last_reset_time = current_time
                 
             db.ingest_text_queue(config.queue_file)
@@ -118,11 +119,16 @@ def queue_worker_loop(config: AppConfig, shutdown_event, poll_interval: int = 60
                 try:
                     # Assemble Context, Strategy and Pipeline
                     strategy = IntelQSVStrategy(config)
-                    context = JobContext(config=config, db=db, media_item=media_item, strategy=strategy, shutdown_event=shutdown_event)
+                    context = JobContext(config=config, db=db, media_item=media_item, strategy=strategy, job_id=job_id, shutdown_event=shutdown_event)
                     pipeline = ProcessingPipeline(context)
                     
                     # Execute
-                    pipeline.run()
+                    result = pipeline.run()
+                    if not result:
+                        logger.error(f"Pipeline returned False/failed for {job_path}, moving on.")
+                        # db update should happen inside pipeline, or here. 
+                        # Pipeline handles its own FAILED state inline where needed.
+                        continue
                             
                     # Mark successful in DB 
                     db.update_job_status(job_id, JobStatus.COMPLETED.value)

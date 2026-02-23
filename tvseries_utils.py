@@ -42,36 +42,20 @@ def clean_season_folder_name(season_path: Path):
         if season_path.resolve() == new_season_path.resolve():
             return new_season_path
             
-        shutil.move(str(season_path), str(new_season_path))
+        try:
+            shutil.move(str(season_path), str(new_season_path))
+        except (shutil.Error, OSError) as e:
+            logger.warning(f"Cross-device move failed: {e}. Falling back to copytree/rmtree.")
+            try:
+                shutil.copytree(str(season_path), str(new_season_path))
+                shutil.rmtree(str(season_path))
+            except Exception as inner_e:
+                logger.error(f"Fallback copytree failed: {inner_e}")
+                return None
+                
         return new_season_path
     
     return None
-
-def queue_episodes(episode_files: list, db: 'DatabaseManager') -> int:
-    """
-    Queue all episode files to the SQLite conversion database.
-    Returns the number of successfully queued episodes.
-    """
-    if not episode_files:
-        return 0
-    
-    queued_count = 0
-    try:
-        for episode_file in episode_files:
-            if not db.add_job(str(episode_file)):
-                logger.info(f"EPISODE_ALREADY_QUEUED: {episode_file}")
-                continue
-                
-            queued_count += 1
-            logger.info(f"QUEUED_EPISODE: {episode_file}")
-    
-    except Exception as e:
-        logger.exception(f"ERROR_queueing_episodes: {e}")
-        return queued_count
-    
-    logger.info(f"QUEUED_{queued_count}_EPISODES")
-    return queued_count
-
 
 def sanitize_tvseries_name(filename: str) -> str:
     """

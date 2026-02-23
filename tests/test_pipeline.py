@@ -12,7 +12,8 @@ def test_vram_exhaustion_step_down(dummy_media_item, in_memory_db, mock_config):
         config=mock_config,
         db=in_memory_db,
         media_item=dummy_media_item,
-        strategy=MagicMock()
+        strategy=MagicMock(),
+        job_id=1
     )
     
     pipeline = ProcessingPipeline(context)
@@ -58,7 +59,8 @@ def test_target_exists_fast_fail(dummy_media_item, in_memory_db, mock_config):
         config=mock_config,
         db=in_memory_db,
         media_item=dummy_media_item,
-        strategy=MagicMock()
+        strategy=MagicMock(),
+        job_id=1
     )
     
     pipeline = ProcessingPipeline(context)

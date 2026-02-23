@@ -85,7 +85,6 @@ def main() -> None:
 
     from db_utils import DatabaseManager
     db = DatabaseManager(config.db_path)
-    db.cleanup_old_jobs(days=30)
 
     # Always run in queue daemon mode
     process_queue(config)
