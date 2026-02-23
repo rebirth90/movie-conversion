@@ -60,6 +60,7 @@ class FFmpegCommandBuilder:
         self._video_opts: List[str] = []
         self._audio_opts: List[str] = []
         self._global_opts: List[str] = []
+        self._output_opts: List[str] = []
         self._output: str = ""
 
     def add_global_option(self, flag: str, value: str = ""):
@@ -96,6 +97,12 @@ class FFmpegCommandBuilder:
         self._output = output_path
         return self
 
+    def add_output_option(self, flag: str, value: str = ""):
+        self._output_opts.append(flag)
+        if value:
+            self._output_opts.append(value)
+        return self
+
     def build(self) -> List[str]:
         final_cmd = self._cmd.copy()
         final_cmd.extend(self._global_opts)
@@ -108,6 +115,7 @@ class FFmpegCommandBuilder:
             
         final_cmd.extend(self._video_opts)
         final_cmd.extend(self._audio_opts)
+        final_cmd.extend(self._output_opts)
         
         if not self._output:
             raise ValueError("Output path not set for FFmpegCommandBuilder")
@@ -140,12 +148,15 @@ class IntelQSVStrategy(EncoderStrategy):
         aspect_ratio = stream_info.width / stream_info.height
         # Note: AV1, VC1, MPEG2, and VP8 deliberately fall to hybrid mode based on Gen9.5 capabilities.
         profile_lower = str(stream_info.profile or "").lower()
+        is_h264_10bit = (
+            stream_info.codec_name == "h264" and
+            ("high 10" in profile_lower or "10" in stream_info.pix_fmt)
+        )
         is_hw_supported = (
             stream_info.codec_name in ["hevc", "h264", "vp9"] and
             stream_info.codec_name != "av1" and
             "high 4:4:4" not in profile_lower and
-            "high 10" not in profile_lower and
-            "10" not in stream_info.pix_fmt and
+            not is_h264_10bit and
             "444" not in stream_info.pix_fmt and
             "422" not in stream_info.pix_fmt and
             stream_info.width <= 1920 and
@@ -156,9 +167,13 @@ class IntelQSVStrategy(EncoderStrategy):
             logger.warning("4K source detected. Forcing Hybrid Software Decode to perform 1080p downscale.")
 
         # Base hwaccel options
-        builder.add_global_option("-hwaccel", "qsv")
-        builder.add_global_option("-qsv_device", self.config.qsv_device)
-        builder.add_global_option("-hwaccel_output_format", "qsv")
+        if is_hw_supported:
+            builder.add_global_option("-hwaccel", "qsv")
+            builder.add_global_option("-qsv_device", self.config.qsv_device)
+            builder.add_global_option("-hwaccel_output_format", "qsv")
+        else:
+            builder.add_global_option("-init_hw_device", f"qsv=hw:{self.config.qsv_device}")
+            builder.add_global_option("-filter_hw_device", "hw")
         
         # HDR metadata preservation
         builder.add_video_option("-map_metadata", "0")
@@ -167,6 +182,8 @@ class IntelQSVStrategy(EncoderStrategy):
         if not is_hw_supported:
             logger.info(f"PIPELINE: HYBRID (Software Decode -> Hardware Encode) [BF={bf}]")
             builder.add_global_option("-threads", "6")
+        else:
+            logger.info(f"PIPELINE: FULL HW (Hardware Decode -> Hardware Encode) [BF={bf}]")
 
         # Maximize thread queue size
         builder.add_global_option("-thread_queue_size", "4096")
@@ -200,10 +217,10 @@ class IntelQSVStrategy(EncoderStrategy):
             pad_filter = "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2"
             builder.add_filter(pad_filter)
             sw_fmt = "p010le" if ('10' in stream_info.pix_fmt or 'p010' in stream_info.pix_fmt) else "nv12"
-            builder.add_filter(f"format={sw_fmt},hwupload=extra_hw_frames=32")
+            builder.add_filter(f"format={sw_fmt},hwupload")
         elif not is_hw_supported:
             sw_fmt = "p010le" if ('10' in stream_info.pix_fmt or 'p010' in stream_info.pix_fmt) else "nv12"
-            builder.add_filter(f"format={sw_fmt},hwupload=extra_hw_frames=32")
+            builder.add_filter(f"format={sw_fmt},hwupload")
         else:
             hw_format = "p010le" if ('10' in stream_info.pix_fmt or 'p010' in stream_info.pix_fmt) else "nv12"
             w_h = ""
@@ -240,12 +257,12 @@ class IntelQSVStrategy(EncoderStrategy):
         
         # Golden standard controls
         builder.add_video_option("-bf", str(bf))
-        builder.add_video_option("-b_strategy", "1")
         builder.add_video_option("-g", "240")
-        builder.add_video_option("-mbbrc", "1")
         builder.add_video_option("-rc_mode", "icq")
-        builder.add_video_option("-max_muxing_queue_size", "9999")
-        builder.add_video_option("-avoid_negative_ts", "make_zero")
+        
+        # Output options
+        builder.add_output_option("-max_muxing_queue_size", "9999")
+        builder.add_output_option("-avoid_negative_ts", "make_zero")
 
         # Output
         builder.set_output(str(temp_output))

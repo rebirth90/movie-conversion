@@ -253,6 +253,8 @@ def detect_and_convert_encoding(file_path: Path) -> str:
     content = content.strip()
 
     # Write back as standard UTF-8
+    with open(file_path, 'w', encoding='utf-8') as f:
+        f.write(content)
         
     return content
 

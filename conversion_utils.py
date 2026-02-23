@@ -224,23 +224,27 @@ class ProcessingPipeline:
         # Safely unlink the source video BEFORE removing directories
         self.context.media_item.source_path.unlink(missing_ok=True)
         
+        parent_dir = self.context.media_item.source_path.parent
+        is_base_movie_root = parent_dir.resolve() == self.context.config.base_movies_root.resolve()
+        is_base_tv_root = parent_dir.resolve() == self.context.config.base_tvseries_root.resolve()
+        
         if isinstance(self.context.media_item, Movie):
-            from movie_utils import cleanup_movie_directory
-            cleanup_movie_directory(self.context.media_item.source_path.parent, self.context.config)
-            parent_dir = self.context.media_item.source_path.parent
-            if parent_dir.exists() and parent_dir.is_dir():
-                if not any(parent_dir.iterdir()):
-                    logger.info(f"Directory empty, removing: {parent_dir}")
-                    parent_dir.rmdir()
+            if not is_base_movie_root:
+                from movie_utils import cleanup_movie_directory
+                cleanup_movie_directory(parent_dir, self.context.config)
+                if parent_dir.exists() and parent_dir.is_dir():
+                    if not any(parent_dir.iterdir()):
+                        logger.info(f"Directory empty, removing: {parent_dir}")
+                        parent_dir.rmdir()
         elif isinstance(self.context.media_item, TVEpisode):
-            parent_dir = self.context.media_item.source_path.parent
-            if parent_dir.exists() and parent_dir.is_dir():
+            if parent_dir.exists() and parent_dir.is_dir() and not is_base_tv_root:
                 if not any(parent_dir.iterdir()):
                     logger.info(f"Directory empty, removing: {parent_dir}")
                     parent_dir.rmdir()
             
-            grandparent_dir = self.context.media_item.source_path.parent.parent
-            if grandparent_dir.exists() and grandparent_dir.is_dir():
+            grandparent_dir = parent_dir.parent
+            is_grandparent_base = grandparent_dir.resolve() == self.context.config.base_tvseries_root.resolve()
+            if grandparent_dir.exists() and grandparent_dir.is_dir() and not is_grandparent_base:
                 if not any(grandparent_dir.iterdir()):
                     logger.info(f"Directory empty, removing: {grandparent_dir}")
                     grandparent_dir.rmdir()
