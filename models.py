@@ -10,6 +10,7 @@ from enum import Enum, auto
 import logging
 import subprocess
 import json
+import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -238,7 +239,6 @@ class TVEpisode(MediaItem):
         season_directory_lower = parent_dir.name.lower()
         season_directory_name = parent_dir.name
         
-        import re
         match = re.search(r's(\d{2})', season_directory_lower)
         if match:
             season_directory_name = f"Season{match.group(1)}"
