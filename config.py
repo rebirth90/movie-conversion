@@ -34,7 +34,7 @@ class AppConfig:
     target_movies_dir: Path = Path("/data/archive/movies")
     target_tvseries_dir: Path = Path("/data/archive/tv-series")
     queue_file: Path = Path("/data/scratch/conversion.txt")
-    db_path: Path = Path("/data/scratch/conversion_data.db")
+    db_path: Path = Path(__file__).resolve().parent / "conversion_data.db"
 
     # TMDB API
     tmdb_read_access_token: str = field(default_factory=lambda: os.getenv("TMDB_READ_ACCESS_TOKEN", ""))
