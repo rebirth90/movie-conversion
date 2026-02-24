@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 import shutil
-import time
 import os
+import threading
 import logging
 from pathlib import Path
 from config import AppConfig
 
 logger = logging.getLogger(__name__)
 
-def linux_mv(source: Path, dest: Path) -> None:
+def linux_mv(source: Path, dest: Path, shutdown_event: Optional[threading.Event] = None) -> None:
     """Robust cross-device file move."""
     try:
         shutil.move(str(source), str(dest))
     except (PermissionError, OSError) as e:
         logger.warning(f"shutil.move failed with {e}, falling back to copy+delete for {source}")
-        time.sleep(1)
+        if shutdown_event:
+            shutdown_event.wait(1)
+        else:
+            threading.Event().wait(1)
         shutil.copy2(str(source), str(dest))
         source.unlink(missing_ok=True)
 

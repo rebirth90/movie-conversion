@@ -137,7 +137,7 @@ def queue_worker_loop(config: AppConfig, shutdown_event: threading.Event, poll_i
                                 attachment_paths=attachments
                             )
                         except Exception as email_err:
-                            logger.error(f"Failed to send failure email: {email_err}")
+                            logger.exception(f"Failed to send failure email: {email_err}")
                     finally:
                         # Restore logging to main file
                         restore_main_logging()

@@ -94,7 +94,7 @@ class DatabaseManager:
             # File is locked by another process
             pass
         except Exception as e:
-            logger.error(f"Error reading queue file {queue_path}: {e}")
+            logger.exception(f"Error reading queue file {queue_path}: {e}")
 
     def add_job(self, path: str) -> bool:
         """Add a job to the queue if it doesn't already exist."""

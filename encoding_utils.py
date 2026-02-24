@@ -46,7 +46,7 @@ def get_audio_streams(movie_file: Path, config: AppConfig) -> List[dict]:
 
         return audio_streams
     except Exception as e:
-        logger.error(f"Error extracting audio streams: {e}")
+        logger.warning(f"Error extracting audio streams: {e}", exc_info=True)
         return []
 
 class FFmpegCommandBuilder:
@@ -301,5 +301,5 @@ def execute_process(args: List[str], wait_for_completion: bool = True, config: A
     except Exception as e:
         if log_file:
             log_file.close()
-        logger.error(f"Failed to execute process: {e}")
+        logger.exception(f"Failed to execute process: {e}")
         return None

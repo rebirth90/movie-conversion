@@ -89,7 +89,8 @@ class VideoStreamInfo:
                         minL = side['min_luminance'].split('/')[0]
                         maxL = side['max_luminance'].split('/')[0]
                         master_display = f"G({gx},{gy})B({bx},{by})R({rx},{ry})WP({wpx},{wpy})L({maxL},{minL})"
-                    except Exception:
+                    except Exception as e:
+                        logger.warning(f"Failed to parse master_display side data: {e}", exc_info=True)
                         pass
                 if 'max_content' in side and 'max_average' in side:
                     max_cll = f"{side['max_content']},{side['max_average']}"

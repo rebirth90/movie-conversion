@@ -63,7 +63,7 @@ class ProcessingPipeline:
         """Handles subtitle extraction and standardization."""
         logger.info("-- PHASE: Subtitle Extraction --")
         try:
-            sub = process_subtitle(self.context.media_item.source_path, self.context.media_item.clean_name(), self.context.config)
+            sub = process_subtitle(self.context.media_item.source_path, self.context.media_item.clean_name(), self.context.config, self.context.shutdown_event)
             if not sub:
                 logger.warning("No subtitle processed. Continuing with video only.")
                 return None
@@ -71,7 +71,7 @@ class ProcessingPipeline:
             logger.info(f"Subtitle processed: {sub.name}")
             return sub
         except Exception as e:
-            logger.error(f"Subtitle processing failed: {e}")
+            logger.warning(f"Subtitle processing failed: {e}", exc_info=True)
             # Continuing since subtitle failure is non-fatal usually
             return None
 
@@ -169,7 +169,7 @@ class ProcessingPipeline:
                     time.sleep(2)  # Cooldown HW
                 continue
             except Exception as e:
-                logger.error(f"Encoding failed: {e}")
+                logger.exception(f"Encoding failed: {e}")
                 if temp_output.exists():
                      temp_output.unlink(missing_ok=True)
                 raise VideoEncodingError(f"Fatal encode error: {e}")
@@ -205,18 +205,18 @@ class ProcessingPipeline:
         
         # Move video
         final_video_path = final_dir / encoded_file.name
-        linux_mv(encoded_file, final_video_path)
+        linux_mv(encoded_file, final_video_path, self.context.shutdown_event)
         
         # Move subtitle if exists
         if subtitle_file and subtitle_file.exists():
              final_sub_path = final_dir / subtitle_file.name
-             linux_mv(subtitle_file, final_sub_path)
+             linux_mv(subtitle_file, final_sub_path, self.context.shutdown_event)
              
              if subtitle_file.suffix.lower() == '.sub':
                  idx_file = subtitle_file.with_suffix('.idx')
                  if idx_file.exists():
                      final_idx_path = final_dir / idx_file.name
-                     linux_mv(idx_file, final_idx_path)
+                     linux_mv(idx_file, final_idx_path, self.context.shutdown_event)
              
         # Cleanup original source video to save space
         if not self.context.media_item.source_path.exists():

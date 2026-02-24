@@ -11,6 +11,7 @@ from langdetect import detect, LangDetectException
 from typing import Tuple, Optional
 from config import AppConfig
 import shutil
+import threading
 
 
 logger = logging.getLogger(__name__)
@@ -87,8 +88,8 @@ def get_track(movie_file: Path, config: AppConfig) -> Tuple[Optional[int], Optio
             f"PARSE_ERROR_getting_subtitle_track: {type(e).__name__}: {e}"
         )
         return None, None, None
-    except Exception:
-        logger.exception("UNEXPECTED_ERROR_getting_subtitle_track")
+    except Exception as e:
+        logger.warning(f"UNEXPECTED_ERROR_getting_subtitle_track: {e}", exc_info=True)
         return None, None, None
 
 
@@ -159,7 +160,7 @@ def ffmpeg_extract_subtitle(movie_file: Path, movie_name: str, folder: Path, tra
         logger.exception(f"UNEXPECTED_ERROR extracting subtitle: {e}")
         return None
 
-def extract_subtitle(movie_file, movie_name, output_dir, config: AppConfig):
+def extract_subtitle(movie_file, movie_name, output_dir, config: AppConfig, shutdown_event: Optional[threading.Event] = None):
     track_id, codec, language = get_track(movie_file, config)
 
     if track_id is None or codec is None or language is None:
@@ -172,7 +173,11 @@ def extract_subtitle(movie_file, movie_name, output_dir, config: AppConfig):
         return None, None, None
 
     subtitle_file, extension = result
-    time.sleep(0.5)
+    
+    if shutdown_event:
+        shutdown_event.wait(0.5)
+    else:
+        threading.Event().wait(0.5)
 
     if not subtitle_file.exists():
         logger.warning(f"Extracted subtitle file does not exist: {subtitle_file}")
@@ -363,7 +368,7 @@ def get_first_subtitle_found(movie_file: Path) -> Optional[Path]:
 
     return None
 
-def find_or_extract_subtitle(movie_file: Path, movie_name: str, output_dir: Path, config: AppConfig) -> Tuple[Optional[Path], Optional[str], Optional[str]]:
+def find_or_extract_subtitle(movie_file: Path, movie_name: str, output_dir: Path, config: AppConfig, shutdown_event: Optional[threading.Event] = None) -> Tuple[Optional[Path], Optional[str], Optional[str]]:
     """
     Strategy:
     1. Look for existing external subtitle.
@@ -397,7 +402,7 @@ def find_or_extract_subtitle(movie_file: Path, movie_name: str, output_dir: Path
         
     else:
         logger.info("No external subtitle found, attempting extraction...")
-        extracted_subtitle_file, language, extension = extract_subtitle(movie_file, movie_name, output_dir, config)
+        extracted_subtitle_file, language, extension = extract_subtitle(movie_file, movie_name, output_dir, config, shutdown_event)
         
         if extracted_subtitle_file:
             logger.info(f"Using extracted embedded subtitle: {extracted_subtitle_file}")
@@ -434,14 +439,14 @@ def convert_sub_to_srt(sub_file: Path, config: AppConfig) -> Optional[Path]:
     
     return None
 
-def process_subtitle(source_path: Path, clean_name: str, config: AppConfig):
+def process_subtitle(source_path: Path, clean_name: str, config: AppConfig, shutdown_event: Optional[threading.Event] = None):
     """
     Handle subtitle extraction/discovery and conversion (UTF-8, character replacement).
     SAFEGUARD: Skips text processing if .idx file exists (VobSub).
     Returns path to the processed subtitle file, or None if failed.
     """
     output_dir = source_path.parent
-    subtitle_file, language, extension = find_or_extract_subtitle(source_path, clean_name, output_dir, config)
+    subtitle_file, language, extension = find_or_extract_subtitle(source_path, clean_name, output_dir, config, shutdown_event)
 
     if not subtitle_file:
         return None

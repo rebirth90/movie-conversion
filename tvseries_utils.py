@@ -51,7 +51,7 @@ def clean_season_folder_name(season_path: Path):
                 shutil.copytree(str(season_path), str(new_season_path))
                 shutil.rmtree(str(season_path))
             except Exception as inner_e:
-                logger.error(f"Fallback copytree failed: {inner_e}")
+                logger.exception(f"Fallback copytree failed: {inner_e}")
                 return None
                 
         return new_season_path

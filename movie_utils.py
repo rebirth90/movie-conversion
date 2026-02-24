@@ -40,12 +40,12 @@ def cleanup_movie_directory(directory: Path, config: AppConfig):
                     item.unlink()
                     deleted_count += 1
                 except Exception as e:
-                    logger.warning(f"Failed to delete {item.name}: {e}")
+                    logger.warning(f"Failed to delete {item.name}: {e}", exc_info=True)
 
         logger.info(f"CLEANUP_COMPLETE: Kept {kept_count} files, deleted {deleted_count} files")
 
     except Exception as e:
-        logger.error(f"ERROR during cleanup: {e}")
+        logger.exception(f"ERROR during cleanup: {e}")
 
 
 

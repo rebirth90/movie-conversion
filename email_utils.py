@@ -48,7 +48,7 @@ def send_failure_email(config: AppConfig, subject: str, body: str, attachment_pa
                         part['Content-Disposition'] = f'attachment; filename="{path.name}"'
                         msg.attach(part)
                     except Exception as e:
-                        logger.error(f"Failed to attach file {path}: {e}")
+                        logger.warning(f"Failed to attach file {path}: {e}", exc_info=True)
 
         # Connect to SMTP Server
         if config.email_smtp_ssl:
@@ -65,5 +65,5 @@ def send_failure_email(config: AppConfig, subject: str, body: str, attachment_pa
         return True
 
     except Exception as e:
-        logger.error(f"Failed to send email: {e}")
+        logger.exception(f"Failed to send email: {e}")
         return False
