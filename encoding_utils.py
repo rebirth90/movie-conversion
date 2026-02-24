@@ -159,8 +159,8 @@ class IntelQSVStrategy(EncoderStrategy):
             not is_h264_10bit and
             "444" not in stream_info.pix_fmt and
             "422" not in stream_info.pix_fmt and
-            stream_info.width == 1920 and
-            stream_info.height == 1080
+            stream_info.width <= 1920 and
+            stream_info.height <= 1080
         )
 
         if stream_info.width > 1920:
@@ -249,6 +249,10 @@ class IntelQSVStrategy(EncoderStrategy):
         builder.add_video_option("-preset", "veryslow")
         builder.add_video_option("-global_quality", str(self.config.global_quality_default))
         builder.add_video_option("-b:v", "0")
+        if stream_info.master_display:
+            builder.add_video_option("-master_display", stream_info.master_display)
+        if stream_info.max_cll:
+            builder.add_video_option("-cll", stream_info.max_cll)
         
         # QSV Customizations
         builder.add_video_option("-look_ahead", "1")
@@ -287,12 +291,12 @@ def execute_process(args: List[str], wait_for_completion: bool = True, config: O
             proc.log_file = log_file
             return proc
             
-        _, stderr = proc.communicate()
+        proc.wait()
         if proc.returncode != 0:
             if config:
-                logger.error(f"Command failed. Check log at: {log_file_path}")
+                logger.error(f"Command failed with returncode={proc.returncode}. Check log at: {log_file_path}")
             else:
-                logger.error(f"Command failed: {stderr}")
+                logger.error(f"Command failed with returncode={proc.returncode}")
             if log_file:
                 log_file.close()
             return None

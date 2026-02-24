@@ -282,6 +282,7 @@ class MediaFactory:
                     episodes = []
                     for ext in ('.mkv', '.mp4', '.avi', '.m4v', '.MKV', '.MP4', '.AVI', '.M4V'):
                         episodes.extend(target_dir.rglob(f"*{ext}"))
+                    episodes.sort()
                     return [TVEpisode(source_path=ep, config=config, original_job_path=source_path) for ep in episodes]
                 return [TVEpisode(source_path=source_path, config=config, original_job_path=source_path)]
             case _:

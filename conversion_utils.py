@@ -32,7 +32,7 @@ class ProcessingPipeline:
             logger.error(f"Cannot compute target path to check for existence: {e}")
             return False
             
-        expected_mp4 = f"{self.context.media_item.clean_name()}_converted.mp4"
+        expected_mp4 = f"{self.context.media_item.clean_name()}.mp4"
         check_path = final_dir / expected_mp4
             
         if check_path.exists():
@@ -107,7 +107,7 @@ class ProcessingPipeline:
                  # If heuristics map to something weirder than tiers, inject it as top tier
                  tiers.insert(0, EncodingTier(bf=best_bf, lad=best_lad, async_depth=best_async, desc="Heuristic Model"))
 
-        temp_output = self.context.media_item.source_path.with_name(f"{self.context.media_item.clean_name()}_converted.mp4")
+        temp_output = self.context.media_item.source_path.with_name(f"{self.context.media_item.clean_name()}_temp.mp4")
 
         for attempt in tiers:
             if self.context.shutdown_event and self.context.shutdown_event.is_set():
@@ -189,7 +189,7 @@ class ProcessingPipeline:
             return False
         
         # Move video
-        final_video_path = final_dir / encoded_file.name
+        final_video_path = final_dir / f"{self.context.media_item.clean_name()}.mp4"
         linux_mv(encoded_file, final_video_path, self.context.shutdown_event)
         
         # Move subtitle if exists

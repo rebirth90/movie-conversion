@@ -53,6 +53,7 @@ def queue_worker_loop(config: AppConfig, shutdown_event: threading.Event, poll_i
 
             if job_record:
                 job_id, job_path_str = job_record
+                db.update_job_status(job_id, JobStatus.PROCESSING.value)
                 logger.info(f"DEQUEUED_JOB [{job_id}]: {job_path_str}")
                 job_path = Path(job_path_str)
 
