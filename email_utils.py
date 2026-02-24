@@ -5,7 +5,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 from config import AppConfig
 
 logger = logging.getLogger(__name__)

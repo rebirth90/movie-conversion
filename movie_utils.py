@@ -3,7 +3,6 @@ import logging
 import re
 from typing import Optional
 from pathlib import Path
-from pathlib import Path
 from config import AppConfig
 from metadata_utils import search_movie_tmdb
 
