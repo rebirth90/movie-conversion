@@ -10,7 +10,7 @@ import glob
 from langdetect import detect, LangDetectException
 from typing import Tuple, Optional
 from config import AppConfig
-import shutil
+from file_utils import linux_mv
 import threading
 
 
@@ -160,7 +160,7 @@ def ffmpeg_extract_subtitle(movie_file: Path, movie_name: str, folder: Path, tra
         logger.exception(f"UNEXPECTED_ERROR extracting subtitle: {e}")
         return None
 
-def extract_subtitle(movie_file, movie_name, output_dir, config: AppConfig, shutdown_event: Optional[threading.Event] = None):
+def extract_subtitle(movie_file: Path, movie_name: str, output_dir: Path, config: AppConfig, shutdown_event: Optional[threading.Event] = None) -> Tuple[Optional[Path], Optional[str], Optional[str]]:
     track_id, codec, language = get_track(movie_file, config)
 
     if track_id is None or codec is None or language is None:
@@ -192,7 +192,7 @@ def extract_subtitle(movie_file, movie_name, output_dir, config: AppConfig, shut
     
     return subtitle_file, language, extension
 
-def detect_and_convert_encoding(file_path: Path) -> str:
+def detect_and_convert_encoding(file_path: Path) -> Optional[str]:
     with open(file_path, 'rb') as f:
         raw_data = f.read()
 
@@ -282,8 +282,8 @@ def character_replace(src_file: Path, dst_file: Path, config: AppConfig) -> None
             
         logger.info(f"Made {total_replacements} replacements in {dst_file}")
 
-    except Exception as e:
-        logger.error("ERROR_in_clean_subtitle_file: %s", e)
+    except Exception:
+        logger.exception("ERROR_in_clean_subtitle_file")
         raise
 
 def get_language(subtitle_path: str | Path) -> str:
@@ -344,9 +344,9 @@ def get_language(subtitle_path: str | Path) -> str:
     except LangDetectException:
         logger.warning(f"Language detection failed for {path.name}")
         return "unknown"
-    except Exception as e:
-        logger.error(f"Error detecting language for {path.name}: {e}")
-        return f"error: {str(e)}"
+    except Exception:
+        logger.exception(f"Error detecting language for {path.name}")
+        return "error_detecting_language"
 
 def get_first_subtitle_found(movie_file: Path) -> Optional[Path]:
     """
@@ -391,11 +391,10 @@ def find_or_extract_subtitle(movie_file: Path, movie_name: str, output_dir: Path
         # FIX: Rename the file if the name is different
         if subtitle_path != existing_subtitle_file:
             logger.info(f"Renaming subtitle: {existing_subtitle_file.name} -> {subtitle_path.name}")
-            try:
-                shutil.move(str(existing_subtitle_file), str(subtitle_path))
+            if linux_mv(existing_subtitle_file, subtitle_path):
                 logger.info("Subtitle renamed successfully")
-            except OSError as e:
-                logger.error(f"Failed to rename subtitle: {e}")
+            else:
+                logger.error("Failed to rename subtitle")
                 return None, None, None
 
         return subtitle_path, language, extension
@@ -426,7 +425,7 @@ def convert_sub_to_srt(sub_file: Path, config: AppConfig) -> Optional[Path]:
     
     try:
         logger.info(f"CONVERTING: {sub_file.name} -> .srt")
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
         
         if srt_file.exists() and srt_file.stat().st_size > 0:
             logger.info("CONVERSION_SUCCESSFUL")
@@ -439,7 +438,7 @@ def convert_sub_to_srt(sub_file: Path, config: AppConfig) -> Optional[Path]:
     
     return None
 
-def process_subtitle(source_path: Path, clean_name: str, config: AppConfig, shutdown_event: Optional[threading.Event] = None):
+def process_subtitle(source_path: Path, clean_name: str, config: AppConfig, shutdown_event: Optional[threading.Event] = None) -> Optional[Path]:
     """
     Handle subtitle extraction/discovery and conversion (UTF-8, character replacement).
     SAFEGUARD: Skips text processing if .idx file exists (VobSub).

@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 from exceptions import MediaValidationError
 from config import AppConfig
 from tvseries_utils import sanitize_tvseries_name, clean_season_folder_name
-from movie_utils import sanitize_movie_name, get_largest_movie_file
+from movie_utils import sanitize_movie_name, get_largest_movie_file, cleanup_movie_directory
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +161,16 @@ class MediaItem(ABC):
         """Returns the sanitized/matched name of the item."""
         pass
 
+    @abstractmethod
+    def compute_final_directory(self) -> Path:
+        """Computes the exact final destination directory for the artifacts."""
+        pass
+
+    @abstractmethod
+    def cleanup_source_directory(self, logger: logging.Logger, final_dir: Path) -> None:
+        """Deletes original artifacts and directories if safe to do so. Moves any kept ancillary files to final_dir."""
+        pass
+
 
 class Movie(MediaItem):
     """Represents a discrete Movie entity."""
@@ -173,8 +183,39 @@ class Movie(MediaItem):
         try:
             return sanitize_movie_name(self.source_path.stem, self.config)
         except Exception as e:
-            logger.warning(f"Error sanitizing movie name {self.source_path.stem}: {e}")
+            logger.warning(f"Error sanitizing movie name {self.source_path.stem}: {e}", exc_info=True)
             return self.source_path.stem
+
+    def compute_final_directory(self) -> Path:
+        return self.config.target_movies_dir / self.clean_name()
+
+    def cleanup_source_directory(self, logger: logging.Logger, final_dir: Path) -> None:
+        if not self.source_path.exists():
+            return
+            
+        self.source_path.unlink(missing_ok=True)
+        
+        parent_dir = self.source_path.parent
+        if parent_dir.resolve() != self.config.base_movies_root.resolve():
+            cleanup_movie_directory(parent_dir, self.config)
+            
+            # Move remaining ancillary files to final_dir to prevent orphans
+            if parent_dir.exists() and parent_dir.is_dir():
+                from file_utils import linux_mv
+                for item in parent_dir.iterdir():
+                    if item.is_file():
+                        target_file = final_dir / item.name
+                        if target_file.resolve() != item.resolve():
+                            logger.info(f"Moving ancillary file: {item.name} -> {final_dir.name}")
+                            linux_mv(item, target_file)
+
+                # Now remove if empty
+                try:
+                    if not any(parent_dir.iterdir()):
+                        logger.info(f"Directory empty, removing: {parent_dir}")
+                        parent_dir.rmdir()
+                except OSError as e:
+                    logger.warning(f"Could not remove movie directory {parent_dir}: {e}", exc_info=True)
 
 
 class TVEpisode(MediaItem):
@@ -188,8 +229,40 @@ class TVEpisode(MediaItem):
         try:
             return sanitize_tvseries_name(self.source_path.name)
         except Exception as e:
-            logger.warning(f"Error sanitizing TV episode {self.source_path.name}: {e}")
+            logger.warning(f"Error sanitizing TV episode {self.source_path.name}: {e}", exc_info=True)
             return self.source_path.stem
+
+    def compute_final_directory(self) -> Path:
+        rel_path = self.source_path.parent.relative_to(self.config.base_tvseries_root)
+        return self.config.target_tvseries_dir / rel_path
+
+    def cleanup_source_directory(self, logger: logging.Logger, final_dir: Path) -> None:
+        if not self.source_path.exists():
+            return
+            
+        self.source_path.unlink(missing_ok=True)
+        
+        parent_dir = self.source_path.parent
+        is_base_tv_root = parent_dir.resolve() == self.config.base_tvseries_root.resolve()
+        
+        if parent_dir.exists() and parent_dir.is_dir() and not is_base_tv_root:
+            try:
+                if not any(parent_dir.iterdir()):
+                    logger.info(f"Directory empty, removing: {parent_dir}")
+                    parent_dir.rmdir()
+            except OSError as e:
+                logger.warning(f"Could not remove season directory {parent_dir}: {e}", exc_info=True)
+        
+        grandparent_dir = parent_dir.parent
+        is_grandparent_base = grandparent_dir.resolve() == self.config.base_tvseries_root.resolve()
+        
+        if grandparent_dir.exists() and grandparent_dir.is_dir() and not is_grandparent_base:
+            try:
+                if not any(grandparent_dir.iterdir()):
+                    logger.info(f"Directory empty, removing: {grandparent_dir}")
+                    grandparent_dir.rmdir()
+            except OSError as e:
+                logger.warning(f"Could not remove series directory {grandparent_dir}: {e}", exc_info=True)
 
 class MediaFactory:
     """Factory for producing appropriate MediaItem domain models based on MediaType."""

@@ -24,7 +24,7 @@ from config import AppConfig
 shutdown_event = threading.Event()
 
 
-def signal_handler(signum, frame):
+def signal_handler(signum, frame) -> None:
     """Handle graceful shutdown on SIGTERM/SIGINT."""
     global shutdown_event
     

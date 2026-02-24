@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-def clean_season_folder_name(season_path: Path):
+def clean_season_folder_name(season_path: Path) -> Optional[Path]:
     """
     Standardize season folder names.
     e.g. "Season.01" -> "Season01"
@@ -58,7 +58,7 @@ def clean_season_folder_name(season_path: Path):
     
     return None
 
-def process_tv_series_directory(dir_path: Path, config: 'AppConfig', db) -> bool:
+def process_tv_series_directory(dir_path: Path, config: 'AppConfig', db: 'DatabaseManager') -> bool:
     target_dir = clean_season_folder_name(dir_path) or dir_path
     
     episodes = []

@@ -8,9 +8,8 @@ from pathlib import Path
 import shutil
 import time
 
-from models import JobContext, EncodingTier, TVEpisode, Movie, JobStatus
+from models import JobContext, EncodingTier, JobStatus
 from file_utils import linux_mv
-from movie_utils import cleanup_movie_directory
 from encoding_utils import execute_process
 from subtitle_utils import process_subtitle
 from exceptions import VideoEncodingError, VRAMExhaustionError, ShutdownRequestedError
@@ -27,22 +26,22 @@ class ProcessingPipeline:
         logger.info(f"=== PIPELINE STARTED: {self.context.media_item.source_path.name} ===")
         
         # Fast-fail if target already exists
-        target_root = self.context.media_item.target_directory()
+        try:
+            final_dir = self.context.media_item.compute_final_directory()
+        except ValueError as e:
+            logger.error(f"Cannot compute target path to check for existence: {e}")
+            return False
+            
         expected_mp4 = f"{self.context.media_item.clean_name()}_converted.mp4"
-        
-        if isinstance(self.context.media_item, TVEpisode):
-            rel_path = self.context.media_item.source_path.parent.relative_to(self.context.config.base_tvseries_root)
-            check_path = target_root / rel_path / expected_mp4
-        else:
-            check_path = target_root / self.context.media_item.clean_name() / expected_mp4
+        check_path = final_dir / expected_mp4
             
         if check_path.exists():
             logger.warning(f"TARGET_EXISTS: {check_path.name}. Skipping conversion.")
-            self.context.media_item.source_path.unlink(missing_ok=True)
             # Clean up associated subtitles to prevent orphans
             for ext in ['.srt', '.sub', '.idx', '.ass']:
                 sub_file = self.context.media_item.source_path.with_suffix(ext)
                 sub_file.unlink(missing_ok=True)
+            self.context.media_item.cleanup_source_directory(logger, final_dir)
             return check_path.parent
         
         # --- PHASE 1: Subtitle Extraction ---
@@ -181,27 +180,13 @@ class ProcessingPipeline:
         """Moves fully processed artifacts exactly into their target Domain structure."""
         logger.info("-- PHASE: Relocation --")
         
-        target_root = self.context.media_item.target_directory()
-        
-        
-        
-        if isinstance(self.context.media_item, TVEpisode):
-            try:
-                rel_path = self.context.media_item.source_path.parent.relative_to(self.context.config.base_tvseries_root)
-                final_dir = target_root / rel_path
-                final_dir.mkdir(parents=True, exist_ok=True)
-            except ValueError as e:
-                self.context.db.update_job_status(self.context.job_id, JobStatus.FAILED.value)
-                return False
-        elif isinstance(self.context.media_item, Movie):
-            if self.context.media_item.source_path.parent == self.context.config.base_movies_root:
-                final_dir = self.context.config.target_movies_dir / self.context.media_item.clean_name()
-            else:
-                final_dir = target_root / self.context.media_item.clean_name()
+        try:
+            final_dir = self.context.media_item.compute_final_directory()
             final_dir.mkdir(parents=True, exist_ok=True)
-        else:
-            final_dir = target_root / self.context.media_item.clean_name()
-            final_dir.mkdir(parents=True, exist_ok=True)
+        except ValueError as e:
+            logger.error(f"Path resolution error during relocation: {e}")
+            self.context.db.update_job_status(self.context.job_id, JobStatus.FAILED.value)
+            return False
         
         # Move video
         final_video_path = final_dir / encoded_file.name
@@ -219,34 +204,6 @@ class ProcessingPipeline:
                      linux_mv(idx_file, final_idx_path, self.context.shutdown_event)
              
         # Cleanup original source video to save space
-        if not self.context.media_item.source_path.exists():
-             return final_dir
-        
-        # Safely unlink the source video BEFORE removing directories
-        self.context.media_item.source_path.unlink(missing_ok=True)
-        
-        parent_dir = self.context.media_item.source_path.parent
-        is_base_movie_root = parent_dir.resolve() == self.context.config.base_movies_root.resolve()
-        is_base_tv_root = parent_dir.resolve() == self.context.config.base_tvseries_root.resolve()
-        
-        if isinstance(self.context.media_item, Movie):
-            if not is_base_movie_root:
-                cleanup_movie_directory(parent_dir, self.context.config)
-                if parent_dir.exists() and parent_dir.is_dir():
-                    if not any(parent_dir.iterdir()):
-                        logger.info(f"Directory empty, removing: {parent_dir}")
-                        parent_dir.rmdir()
-        elif isinstance(self.context.media_item, TVEpisode):
-            if parent_dir.exists() and parent_dir.is_dir() and not is_base_tv_root:
-                if not any(parent_dir.iterdir()):
-                    logger.info(f"Directory empty, removing: {parent_dir}")
-                    parent_dir.rmdir()
-            
-            grandparent_dir = parent_dir.parent
-            is_grandparent_base = grandparent_dir.resolve() == self.context.config.base_tvseries_root.resolve()
-            if grandparent_dir.exists() and grandparent_dir.is_dir() and not is_grandparent_base:
-                if not any(grandparent_dir.iterdir()):
-                    logger.info(f"Directory empty, removing: {grandparent_dir}")
-                    grandparent_dir.rmdir()
+        self.context.media_item.cleanup_source_directory(logger, final_dir)
             
         return final_dir

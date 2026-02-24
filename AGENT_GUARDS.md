@@ -5,7 +5,7 @@
 ## 1. Strict OOP, DDD, and Design Patterns (SOLID)
 - **Do the Heavy Lifting:** If a feature requires changing a method signature (e.g., returning a `list` instead of a single object) to fit the architecture properly, you MUST modify the signature and update all callers. DO NOT write a local procedural hack to avoid refactoring.
 - **Design Patterns:** Adhere to the established patterns. Use the `MediaFactory` for object creation, the `ProcessingPipeline` for execution, and `EncoderStrategy` for algorithmic variations. 
-- **Polymorphism over Conditionals:** Avoid `if isinstance(...)` or `match` statements in execution loops. Rely on abstract base class (ABC) methods in domain models (e.g., calling `media_item.target_directory()`).
+- **Polymorphism over Conditionals:** Avoid `if isinstance(...)` or `match` statements in execution loops. Rely on abstract base class (ABC) methods in domain models.
 
 ## 2. Zero Bypasses & No Shortcuts
 - **The Pipeline is Sacred:** All media processing MUST flow through the pipeline. Do NOT write procedural interceptors in `core.py` or `main.py`.
@@ -15,7 +15,6 @@
 - **Surgical Precision:** Do not rewrite entire files or inject unrelated formatting changes. Apply exact, concise edits that only address the specific bug.
 - **Type Hinting:** Maintain strict Python type hints (`typing` module) for all new or modified methods.
 - **PEP-8 Imports:** ALL imports must be at the top of the file. Do NOT place `import` statements inside functions, loops, or `try/except` blocks.
-- **No Bare Exceptions:** Catch specific exceptions (`MediaValidationError`, `OSError`). If using a generic `Exception`, you must log the traceback.
 
 ## 4. Concurrency & State Tracking
 - **No Blocking Sleeps:** NEVER use `time.sleep()` in worker loops. ALWAYS use `shutdown_event.wait(interval)`.
@@ -23,14 +22,24 @@
 
 ---
 
-## 🛑 MANDATORY ITERATIVE SELF-REVIEW 🛑
-*Before applying any file edit, you must output a thought process answering these 6 questions. If ANY answer fails the standard, you must discard your plan, redesign the fix, and review it again until perfect.*
+## 🛑 MANDATORY ITERATIVE SELF-REVIEW PROTOCOL 🛑
 
-1. **The Hack Check:** Is this a shortcut/band-aid, or did I do the heavy lifting to fix the root architectural cause?
-2. **OOP Check:** Does this fix leverage OOP and Polymorphism, or did I just write a procedural `if/match` statement?
-3. **Pipeline Check:** Does my fix bypass the `ProcessingPipeline` or `MediaFactory`?
-4. **Precision Check:** Is my edit surgical? Am I modifying only what is strictly necessary?
-5. **Concurrency Check:** Did I avoid `time.sleep()` and use the `shutdown_event`?
-6. **Import Check:** Are all imports at the top of the file?
+*Before applying any file edit, you MUST execute this exact 3-step protocol in your output:*
 
-If the answer to any of these violates the guards, **REJECT YOUR OWN FIX** and try again.
+### STEP 1: PROPOSE & ACTIVELY SELF-REVIEW
+Output your proposed code changes and explicitly answer these 6 questions in the chat:
+1. **The Hack Check:** Is this a shortcut, or did I do the heavy lifting to adapt it to the DDD architecture?
+2. **OOP Check:** Does this use Polymorphism/Domain Models instead of procedural `if/match` blocks?
+3. **Pipeline Check:** Does it strictly flow through `MediaFactory` -> `ProcessingPipeline`?
+4. **Precision Check:** Is my file edit surgical and exact?
+5. **Concurrency Check:** Did I use `shutdown_event.wait()` instead of `time.sleep()`?
+6. **Import Check:** Are all imports perfectly placed at the top of the file?
+
+### STEP 2: REFINE (IF NECESSARY)
+If ANY answer to the questions above reveals a shortcut, architectural violation, or bad practice, you MUST output: 
+> **"Self-Review Failed: [State the reason here]"**
+
+You must then discard your plan, redesign the architecture of your fix, and repeat STEP 1. **Do not proceed to edit the file until the review is perfect.**
+
+### STEP 3: EXECUTE
+Only after passing the self-review, apply the precise, surgical fix using your file editing tools. Ensure no regressions were introduced.

@@ -269,17 +269,19 @@ class IntelQSVStrategy(EncoderStrategy):
         
         return builder
 
-def execute_process(args: List[str], wait_for_completion: bool = True, config: AppConfig = None, log_name: str = "ffmpeg"):
+def execute_process(args: List[str], wait_for_completion: bool = True, config: Optional[AppConfig] = None, log_name: str = "ffmpeg") -> Optional[subprocess.Popen]:
     """Execute generic subprocess correctly."""
     log_file = None
     try:
         if config:
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             log_file_path = config.log_ffmpeg_dir / f"{log_name}_{timestamp}.log"
-            log_file = open(log_file_path, "w")
-            proc = subprocess.Popen(args, stdout=log_file, stderr=log_file, text=True)
+            log_file = open(log_file_path, "w", encoding="utf-8")
+            log_file.write(f"Start: {datetime.datetime.now()}\nCommand: {' '.join(str(a) for a in args)}\n" + "-"*80 + "\n")
+            log_file.flush()
+            proc = subprocess.Popen(args, stdout=log_file, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True)
         else:
-            proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+            proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, text=True)
         
         if not wait_for_completion:
             proc.log_file = log_file
