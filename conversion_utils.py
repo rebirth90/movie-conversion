@@ -7,6 +7,8 @@ import logging
 from pathlib import Path
 import shutil
 import time
+import glob
+from typing import Optional
 
 from models import JobContext, EncodingTier, JobStatus
 from file_utils import linux_mv
@@ -21,7 +23,7 @@ class ProcessingPipeline:
     def __init__(self, context: JobContext):
         self.context = context
 
-    def run(self) -> Path:
+    def run(self) -> Optional[Path]:
         """Executes the conversion pipeline."""
         logger.info(f"=== PIPELINE STARTED: {self.context.media_item.source_path.name} ===")
         
@@ -30,7 +32,7 @@ class ProcessingPipeline:
             final_dir = self.context.media_item.compute_final_directory()
         except ValueError as e:
             logger.error(f"Cannot compute target path to check for existence: {e}")
-            return False
+            return None
             
         expected_mp4 = f"{self.context.media_item.clean_name()}.mp4"
         check_path = final_dir / expected_mp4
@@ -53,7 +55,7 @@ class ProcessingPipeline:
         # 3. Relocate
         final_dir = self._relocate(encoded_file, subtitle_path)
         if not final_dir:
-            return False
+            return None
             
         logger.info(f"=== PIPELINE SUCCESS: {final_dir} ===")
         return final_dir
@@ -127,7 +129,6 @@ class ProcessingPipeline:
                 proc = execute_process(cmd, wait_for_completion=True, config=self.context.config, log_name=self.context.media_item.clean_name())
                 if proc is None:
                     # Check recent log for memory strings
-                    import glob
                     is_vram = False
                     if self.context.config.log_ffmpeg_dir.exists():
                         safe_log_name = glob.escape(self.context.media_item.clean_name())
@@ -185,8 +186,7 @@ class ProcessingPipeline:
             final_dir.mkdir(parents=True, exist_ok=True)
         except ValueError as e:
             logger.error(f"Path resolution error during relocation: {e}")
-            self.context.db.update_job_status(self.context.job_id, JobStatus.FAILED.value)
-            return False
+            raise ValueError(f"Relocation failed (outside specific base root): {e}")
         
         # Move video
         final_video_path = final_dir / f"{self.context.media_item.clean_name()}.mp4"

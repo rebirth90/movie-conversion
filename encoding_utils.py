@@ -4,7 +4,7 @@ Implements the Strategy and Builder patterns for Domain-Driven Design.
 """
 
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional
 from pathlib import Path
 import logging
 import subprocess
@@ -210,7 +210,8 @@ class IntelQSVStrategy(EncoderStrategy):
                 builder.add_audio_option(f"-b:a:{i}", "256k")
             else:
                 builder.add_audio_option(f"-b:a:{i}", "192k")
-            builder.add_audio_option(f"-metadata:s:a:{i}", f"language={lang}")
+            if lang and lang != "und":
+                builder.add_audio_option(f"-metadata:s:a:{i}", f"language={lang}")
 
         # --- FILTERS ---
         if not is_hw_supported and (stream_info.width != 1920 or stream_info.height != 1080):
@@ -246,7 +247,7 @@ class IntelQSVStrategy(EncoderStrategy):
         enc_profile = "main10" if ('10' in stream_info.pix_fmt or 'p010' in stream_info.pix_fmt) else "main"
         builder.add_video_option("-profile:v", enc_profile)
         builder.add_video_option("-level:v", "5.1")
-        builder.add_video_option("-preset", "veryslow")
+        builder.add_video_option("-preset", self.config.qsv_preset)
         builder.add_video_option("-global_quality", str(self.config.global_quality_default))
         builder.add_video_option("-b:v", "0")
         if stream_info.master_display:
@@ -288,6 +289,7 @@ def execute_process(args: List[str], wait_for_completion: bool = True, config: O
             proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, text=True)
         
         if not wait_for_completion:
+            """Caller is responsible for calling proc.log_file.close() after proc finishes."""
             proc.log_file = log_file
             return proc
             
@@ -297,15 +299,12 @@ def execute_process(args: List[str], wait_for_completion: bool = True, config: O
                 logger.error(f"Command failed with returncode={proc.returncode}. Check log at: {log_file_path}")
             else:
                 logger.error(f"Command failed with returncode={proc.returncode}")
-            if log_file:
-                log_file.close()
             return None
             
-        if log_file:
-            log_file.close()
         return proc
     except Exception as e:
-        if log_file:
-            log_file.close()
         logger.exception(f"Failed to execute process: {e}")
         return None
+    finally:
+        if wait_for_completion and log_file:
+            log_file.close()

@@ -50,6 +50,7 @@ class AppConfig:
     # Hardware Encoding Configuration
     qsv_device: str = "/dev/dri/renderD128"
     global_quality_default: int = 23
+    qsv_preset: str = "medium"
     qsv_denoise_level: int = 15
 
     # Character replacement rules for Romanian subtitles

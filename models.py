@@ -268,23 +268,22 @@ class MediaFactory:
     """Factory for producing appropriate MediaItem domain models based on MediaType."""
     @staticmethod
     def create(media_type: MediaType, source_path: Path, config: AppConfig) -> list['MediaItem']:
-        match media_type:
-            case MediaType.MOVIE:
-                if source_path.is_dir():
-                    actual_file = get_largest_movie_file(source_path)
-                    if not actual_file:
-                        raise ValueError(f"No valid video file found in directory: {source_path}")
-                    return [Movie(source_path=actual_file, config=config, original_job_path=source_path)]
-                return [Movie(source_path=source_path, config=config, original_job_path=source_path)]
-            case MediaType.TVSERIES:
-                if source_path.is_dir():
-                    target_dir = clean_season_folder_name(source_path) or source_path
-                    episodes = []
-                    for ext in ('.mkv', '.mp4', '.avi', '.m4v', '.MKV', '.MP4', '.AVI', '.M4V'):
-                        episodes.extend(target_dir.rglob(f"*{ext}"))
-                    episodes.sort()
-                    return [TVEpisode(source_path=ep, config=config, original_job_path=source_path) for ep in episodes]
-                return [TVEpisode(source_path=source_path, config=config, original_job_path=source_path)]
-            case _:
-                logger.error(f"Cannot instantiate MediaItem for UNKNOWN media type at {source_path}")
-                return []
+        if media_type == MediaType.MOVIE:
+            if source_path.is_dir():
+                actual_file = get_largest_movie_file(source_path)
+                if not actual_file:
+                    raise ValueError(f"No valid video file found in directory: {source_path}")
+                return [Movie(source_path=actual_file, config=config, original_job_path=source_path)]
+            return [Movie(source_path=source_path, config=config, original_job_path=source_path)]
+        elif media_type == MediaType.TVSERIES:
+            if source_path.is_dir():
+                target_dir = clean_season_folder_name(source_path) or source_path
+                episodes = []
+                for ext in ('.mkv', '.mp4', '.avi', '.m4v', '.MKV', '.MP4', '.AVI', '.M4V'):
+                    episodes.extend(target_dir.rglob(f"*{ext}"))
+                episodes.sort()
+                return [TVEpisode(source_path=ep, config=config, original_job_path=source_path) for ep in episodes]
+            return [TVEpisode(source_path=source_path, config=config, original_job_path=source_path)]
+        else:
+            logger.error(f"Cannot instantiate MediaItem for UNKNOWN media type at {source_path}")
+            return []

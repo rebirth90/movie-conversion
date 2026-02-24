@@ -91,6 +91,7 @@ def queue_worker_loop(config: AppConfig, shutdown_event: threading.Event, poll_i
 
                 all_successful = True
                 shutdown_requested = False
+                failed_items = []
                 
                 for media_item in media_items:
                     log_name = media_item.clean_name()
@@ -109,6 +110,7 @@ def queue_worker_loop(config: AppConfig, shutdown_event: threading.Event, poll_i
                         if not result:
                             logger.error(f"Pipeline returned False/failed for {media_item.source_path}, moving on.")
                             all_successful = False
+                            failed_items.append(media_item.source_path.name)
                                 
                     except ShutdownRequestedError:
                         logger.info(f"JOB_SUSPENDED: {media_item.source_path} will be automatically requeued on next boot.")
@@ -117,6 +119,7 @@ def queue_worker_loop(config: AppConfig, shutdown_event: threading.Event, poll_i
                     except Exception as e:
                         logger.exception(f"ERROR_in_job_processing: {e}")
                         all_successful = False
+                        failed_items.append(media_item.source_path.name)
                         
                         # Attempt to send failure email
                         try:
@@ -142,6 +145,9 @@ def queue_worker_loop(config: AppConfig, shutdown_event: threading.Event, poll_i
                     finally:
                         # Restore logging to main file
                         restore_main_logging()
+
+                if not all_successful and not shutdown_requested and failed_items:
+                    logger.warning(f"Job completed with partial failures. Failed items: {failed_items}")
 
                 if shutdown_requested:
                     db.update_job_status(job_id, JobStatus.PENDING.value)
