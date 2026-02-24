@@ -8,7 +8,9 @@ from pathlib import Path
 import shutil
 import time
 
-from models import JobContext, EncodingTier
+from models import JobContext, EncodingTier, TVEpisode, Movie, JobStatus
+from file_utils import linux_mv
+from movie_utils import cleanup_movie_directory
 from encoding_utils import execute_process
 from subtitle_utils import process_subtitle
 from exceptions import VideoEncodingError, VRAMExhaustionError, ShutdownRequestedError
@@ -28,7 +30,6 @@ class ProcessingPipeline:
         target_root = self.context.media_item.target_directory()
         expected_mp4 = f"{self.context.media_item.clean_name()}_converted.mp4"
         
-        from models import TVEpisode
         if isinstance(self.context.media_item, TVEpisode):
             rel_path = self.context.media_item.source_path.parent.relative_to(self.context.config.base_tvseries_root)
             check_path = target_root / rel_path / expected_mp4
@@ -162,7 +163,10 @@ class ProcessingPipeline:
                 logger.warning(f"Hardware limits exceeded: {e}. Stepping down.")
                 if temp_output.exists():
                      temp_output.unlink(missing_ok=True)
-                time.sleep(2) # Cooldown HW
+                if self.context.shutdown_event:
+                    self.context.shutdown_event.wait(2)
+                else:
+                    time.sleep(2)  # Cooldown HW
                 continue
             except Exception as e:
                 logger.error(f"Encoding failed: {e}")
@@ -179,7 +183,7 @@ class ProcessingPipeline:
         
         target_root = self.context.media_item.target_directory()
         
-        from models import Movie, TVEpisode
+        
         
         if isinstance(self.context.media_item, TVEpisode):
             try:
@@ -187,8 +191,6 @@ class ProcessingPipeline:
                 final_dir = target_root / rel_path
                 final_dir.mkdir(parents=True, exist_ok=True)
             except ValueError as e:
-                logger.error(f"Relocation failed (outside specific base root): {e}")
-                from models import JobStatus
                 self.context.db.update_job_status(self.context.job_id, JobStatus.FAILED.value)
                 return False
         elif isinstance(self.context.media_item, Movie):
@@ -203,7 +205,6 @@ class ProcessingPipeline:
         
         # Move video
         final_video_path = final_dir / encoded_file.name
-        from file_utils import linux_mv
         linux_mv(encoded_file, final_video_path)
         
         # Move subtitle if exists
@@ -230,7 +231,6 @@ class ProcessingPipeline:
         
         if isinstance(self.context.media_item, Movie):
             if not is_base_movie_root:
-                from movie_utils import cleanup_movie_directory
                 cleanup_movie_directory(parent_dir, self.context.config)
                 if parent_dir.exists() and parent_dir.is_dir():
                     if not any(parent_dir.iterdir()):

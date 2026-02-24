@@ -2,10 +2,11 @@
 import logging
 import time
 import signal
+import glob
 from pathlib import Path
 from config import AppConfig
 from db_utils import DatabaseManager
-from file_utils import  should_process_path
+from file_utils import should_process_path, validate_target_root
 from logging_utils import start_job_logging, restore_main_logging
 from email_utils import send_failure_email
 from models import MediaType, MediaFactory, JobStatus, JobContext
@@ -31,15 +32,14 @@ def queue_worker_loop(config: AppConfig, shutdown_event: threading.Event, poll_i
 
     while not shutdown_event.is_set():
         try:
-            from file_utils import validate_target_root
             if not validate_target_root(config.base_movies_root) or not validate_target_root(config.base_tvseries_root):
                 logger.critical("Both source roots are inaccessible. Waiting for mount...")
-                time.sleep(60)
+                shutdown_event.wait(60)
                 continue
                 
             if not validate_target_root(config.target_movies_dir) or not validate_target_root(config.target_tvseries_dir):
                 logger.critical("Archive targets are inaccessible. Sleeping 60s...")
-                time.sleep(60)
+                shutdown_event.wait(60)
                 continue
 
             current_time = time.time()
@@ -71,38 +71,9 @@ def queue_worker_loop(config: AppConfig, shutdown_event: threading.Event, poll_i
                 elif job_path_abs_str.startswith(str(config.base_tvseries_root)):
                     media_type = MediaType.TVSERIES
                     
-                # ===== DIRECTORY ROUTING INTERCEPTOR =====
-                match (job_path.is_dir(), media_type):
-                    case (True, MediaType.TVSERIES):
-                        from tvseries_utils import process_tv_series_directory
-                        process_tv_series_directory(job_path, config, db)
-                        db.update_job_status(job_id, JobStatus.COMPLETED.value)
-                        continue
-                        
-                    case (True, MediaType.MOVIE):
-                        from movie_utils import get_largest_movie_file
-                        movie_file = get_largest_movie_file(job_path)
-                        
-                        if movie_file:
-                            job_path = movie_file
-                        else:
-                            logger.error(f"No valid video file found for movie directory: {job_path}")
-                            db.update_job_status(job_id, JobStatus.FAILED.value)
-                            continue
-                            
-                    case (True, MediaType.UNKNOWN):
-                        logger.error(f"Unknown directory path structure: {job_path}")
-                        db.update_job_status(job_id, JobStatus.FAILED.value)
-                        continue
-                        
-                    case (False, _):
-                        # Standard file, proceed to Factory
-                        pass
-                # ===== END DIRECTORY ROUTING INTERCEPTOR =====
-                
-                # Instantiate MediaItem Domain Model via Factory
+                # Instantiate MediaItem Domain Models via Factory
                 try:
-                    media_item = MediaFactory.create(media_type, job_path, config)
+                    media_items = MediaFactory.create(media_type, job_path, config)
                 except MediaValidationError as e:
                     logger.error(f"Media validation error for {job_path}: {e}")
                     db.update_job_status(job_id, JobStatus.REJECTED.value)
@@ -112,74 +83,75 @@ def queue_worker_loop(config: AppConfig, shutdown_event: threading.Event, poll_i
                     db.update_job_status(job_id, JobStatus.REJECTED.value)
                     continue
                      
-                if not media_item:
+                if not media_items:
                      logger.error(f"Failed to resolve domain model for {job_path}")
                      db.update_job_status(job_id, JobStatus.REJECTED.value)
                      continue
 
-                log_name = media_item.clean_name()
+                all_successful = True
+                shutdown_requested = False
                 
-                # Start per-job logging
-                general_log_path = start_job_logging(config, log_name)
-                
-                try:
-                    # Assemble Context, Strategy and Pipeline
-                    strategy = IntelQSVStrategy(config)
-                    context = JobContext(config=config, db=db, media_item=media_item, strategy=strategy, job_id=job_id, shutdown_event=shutdown_event)
-                    pipeline = ProcessingPipeline(context)
+                for media_item in media_items:
+                    log_name = media_item.clean_name()
                     
-                    # Execute
-                    result = pipeline.run()
-                    if not result:
-                        logger.error(f"Pipeline returned False/failed for {job_path}, moving on.")
-                        db.update_job_status(job_id, JobStatus.FAILED.value)
-                        continue
-                            
-                    # Mark successful in DB 
-                    db.update_job_status(job_id, JobStatus.COMPLETED.value)
-                            
-                except ShutdownRequestedError:
-                    logger.info(f"JOB_SUSPENDED: {job_path} will be automatically requeued on next boot.")
-                    db.update_job_status(job_id, JobStatus.PENDING.value)
-                    continue
-                except Exception as e:
-                    logger.exception(f"ERROR_in_job_processing: {e}")
-                    db.update_job_status(job_id, JobStatus.FAILED.value)
+                    # Start per-job logging
+                    general_log_path = start_job_logging(config, log_name)
                     
-                    # Attempt to send failure email
                     try:
-                        attachments = []
-                        if general_log_path and general_log_path.exists():
-                            attachments.append(general_log_path)
+                        # Assemble Context, Strategy and Pipeline
+                        strategy = IntelQSVStrategy(config)
+                        context = JobContext(config=config, db=db, media_item=media_item, strategy=strategy, job_id=job_id, shutdown_event=shutdown_event)
+                        pipeline = ProcessingPipeline(context)
                         
-                        # Try to find recent FFmpeg log for this job
-                        # Log format: SafeName_Date.log
-                        # We search for files starting with the sanitized log_name in LOG_FFMPEG_DIR
-                        # and pick the most recent one modified in the last few minutes.
-                        if config.log_ffmpeg_dir.exists():
-                            import glob
-                            safe_log_name = glob.escape(log_name)
-                            candidates = list(config.log_ffmpeg_dir.glob(f"*{safe_log_name}*.log"))
-                            if candidates:
-                                # Sort by modification time, newest first
-                                newest_ffmpeg_log = max(candidates, key=lambda p: p.stat().st_mtime)
-                                attachments.append(newest_ffmpeg_log)
+                        # Execute
+                        result = pipeline.run()
+                        if not result:
+                            logger.error(f"Pipeline returned False/failed for {media_item.source_path}, moving on.")
+                            all_successful = False
+                                
+                    except ShutdownRequestedError:
+                        logger.info(f"JOB_SUSPENDED: {media_item.source_path} will be automatically requeued on next boot.")
+                        shutdown_requested = True
+                        break
+                    except Exception as e:
+                        logger.exception(f"ERROR_in_job_processing: {e}")
+                        all_successful = False
                         
-                        send_failure_email(
-                            config=config,
-                            subject=f"Conversion Failed for {log_name}",
-                            body=f"The conversion job for '{job_path}' failed.\n\nError: {e}\n\nSee attached logs for details.",
-                            attachment_paths=attachments
-                        )
-                    except Exception as email_err:
-                        logger.error(f"Failed to send failure email: {email_err}")
-                finally:
-                    # Restore logging to main file
-                    restore_main_logging()
+                        # Attempt to send failure email
+                        try:
+                            attachments = []
+                            if general_log_path and general_log_path.exists():
+                                attachments.append(general_log_path)
+                            
+                            if config.log_ffmpeg_dir.exists():
+                                safe_log_name = glob.escape(log_name)
+                                candidates = list(config.log_ffmpeg_dir.glob(f"*{safe_log_name}*.log"))
+                                if candidates:
+                                    newest_ffmpeg_log = max(candidates, key=lambda p: p.stat().st_mtime)
+                                    attachments.append(newest_ffmpeg_log)
+                            
+                            send_failure_email(
+                                config=config,
+                                subject=f"Conversion Failed for {log_name}",
+                                body=f"The conversion job for '{media_item.source_path}' failed.\n\nError: {e}\n\nSee attached logs for details.",
+                                attachment_paths=attachments
+                            )
+                        except Exception as email_err:
+                            logger.error(f"Failed to send failure email: {email_err}")
+                    finally:
+                        # Restore logging to main file
+                        restore_main_logging()
+
+                if shutdown_requested:
+                    db.update_job_status(job_id, JobStatus.PENDING.value)
+                elif all_successful:
+                    db.update_job_status(job_id, JobStatus.COMPLETED.value)
+                else:
+                    db.update_job_status(job_id, JobStatus.FAILED.value)
 
             else:
-                time.sleep(poll_interval)
+                shutdown_event.wait(poll_interval)
 
         except Exception as e:
             logger.exception("ERROR_in_worker_loop")
-            time.sleep(poll_interval)
+            shutdown_event.wait(poll_interval)

@@ -159,8 +159,8 @@ class IntelQSVStrategy(EncoderStrategy):
             not is_h264_10bit and
             "444" not in stream_info.pix_fmt and
             "422" not in stream_info.pix_fmt and
-            stream_info.width <= 1920 and
-            stream_info.height <= 1080
+            stream_info.width == 1920 and
+            stream_info.height == 1080
         )
 
         if stream_info.width > 1920:
@@ -236,10 +236,10 @@ class IntelQSVStrategy(EncoderStrategy):
             if w_h:
                 filter_parts.append(w_h.lstrip(':'))
                 
-            filter_parts.append(f"format={hw_format}")
-            
-            vpp_filter = f"vpp_qsv={':'.join(filter_parts)}"
-            builder.add_filter(vpp_filter)
+            if filter_parts:
+                filter_parts.append(f"format={hw_format}")
+                vpp_filter = f"vpp_qsv={':'.join(filter_parts)}"
+                builder.add_filter(vpp_filter)
 
         # --- ENCODER OPTIONS ---
         builder.add_video_option("-c:v", "hevc_qsv")

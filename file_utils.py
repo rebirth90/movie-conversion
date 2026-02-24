@@ -1,19 +1,12 @@
 #!/usr/bin/env python3
+import shutil
+import time
+import os
 import logging
 from pathlib import Path
 from config import AppConfig
 
 logger = logging.getLogger(__name__)
-
-
-
-
-
-
-
-import shutil
-import time
-import os
 
 def linux_mv(source: Path, dest: Path) -> None:
     """Robust cross-device file move."""
