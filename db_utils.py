@@ -148,6 +148,16 @@ class DatabaseManager:
             )
             conn.commit()
 
+    def update_job_path(self, job_id: int, new_path: str):
+        """Update a job's path when domain transforms directories."""
+        with self._lock, closing(self._get_connection()) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE jobs SET path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (new_path, job_id)
+            )
+            conn.commit()
+
     def reset_orphaned_jobs(self):
         """Reset jobs that were marked PROCESSING if the worker crashed."""
         with self._lock, closing(self._get_connection()) as conn:

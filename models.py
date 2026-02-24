@@ -21,6 +21,7 @@ from exceptions import MediaValidationError
 from config import AppConfig
 from tvseries_utils import sanitize_tvseries_name, clean_season_folder_name
 from movie_utils import sanitize_movie_name, get_largest_movie_file, cleanup_movie_directory
+from file_utils import linux_mv
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +202,6 @@ class Movie(MediaItem):
             
             # Move remaining ancillary files to final_dir to prevent orphans
             if parent_dir.exists() and parent_dir.is_dir():
-                from file_utils import linux_mv
                 for item in parent_dir.iterdir():
                     if item.is_file():
                         target_file = final_dir / item.name
@@ -233,8 +233,22 @@ class TVEpisode(MediaItem):
             return self.source_path.stem
 
     def compute_final_directory(self) -> Path:
-        rel_path = self.source_path.parent.relative_to(self.config.base_tvseries_root)
-        return self.config.target_tvseries_dir / rel_path
+        parent_dir = self.source_path.parent
+        # Determine clean season name without moving the source dir
+        season_directory_lower = parent_dir.name.lower()
+        season_directory_name = parent_dir.name
+        
+        import re
+        match = re.search(r's(\d{2})', season_directory_lower)
+        if match:
+            season_directory_name = f"Season{match.group(1)}"
+        else:
+            match = re.search(r'season[\s._-]*(\d+)', season_directory_lower)
+            if match:
+                season_directory_name = f"Season{match.group(1).zfill(2)}"
+        
+        rel_parent = parent_dir.parent.relative_to(self.config.base_tvseries_root)
+        return self.config.target_tvseries_dir / rel_parent / season_directory_name
 
     def cleanup_source_directory(self, logger: logging.Logger, final_dir: Path) -> None:
         if not self.source_path.exists():
@@ -277,10 +291,9 @@ class MediaFactory:
             return [Movie(source_path=source_path, config=config, original_job_path=source_path)]
         elif media_type == MediaType.TVSERIES:
             if source_path.is_dir():
-                target_dir = clean_season_folder_name(source_path) or source_path
                 episodes = []
                 for ext in ('.mkv', '.mp4', '.avi', '.m4v', '.MKV', '.MP4', '.AVI', '.M4V'):
-                    episodes.extend(target_dir.rglob(f"*{ext}"))
+                    episodes.extend(source_path.rglob(f"*{ext}"))
                 episodes.sort()
                 return [TVEpisode(source_path=ep, config=config, original_job_path=source_path) for ep in episodes]
             return [TVEpisode(source_path=source_path, config=config, original_job_path=source_path)]

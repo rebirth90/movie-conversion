@@ -4,8 +4,7 @@
 
 This project is a robust, automated media processing pipeline designed to standardize and optimize a personal media library. It automatically detects, cleans, converts, and organizes movies and TV series, ensuring a consistent high-quality viewing experience across all devices.
 
-The system is built to run as a background daemon, utilizing a modern **object-oriented Domain-Driven Design (DDD)** architecture. It monitors a queue of content and processes it with industrial-grade reliability, leveraging a local SQLite database for **heuristic learning** and state tracking. It harnesses **Intel Quick Sync Video (QSV)** hardware acceleration for high-speed encoding, and implements intelligent fallback and retry logic to gracefully handle the nuances of media files, from subtitle character encoding to complex season folder structures.
----
+The system is built to run as a background daemon, utilizing a modern **object-oriented Domain-Driven Design (DDD)** architecture. It monitors a queue of content and processes it with industrial-grade reliability, leveraging a local SQLite database for **heuristic learning** and state tracking. It harnesses **Intel Quick Sync Video (QSV)** hardware acceleration for high-speed encoding, and implements intelligent fallback and concurrency logic to gracefully handle edge cases, memory exhaustion, and asynchronous safe shutdowns.
 
 ## **Installation & Requirements**
 
@@ -32,12 +31,13 @@ pip3 install concurrent-log-handler
 
 ## **Key Features**
 
-### **1. Automated Queue Management & Heuristics**
-*   **Daemonized Worker**: Runs continuously in the background, polling for new jobs using modern pipeline patterns.
+### **1. Enterprise Queue Management & Concurrency**
+*   **Daemonized Worker**: Runs continuously in the background, polling for new jobs using scalable Pipeline patterns.
 *   **File-Based Ingestion**: Simple integration via a text file (`/share/conversion.txt`). Adding content is as easy as appending a path.
-*   **Heuristic Learning Database (New!)**: Uses a local SQLite database (`conversion_data.db`) to track processing history.
-*   **Smart Retries**: Implements intelligent retry loops that adjust encoding parameters (e.g., modifying `extra_hw_frames`, `bf` or hardware padding) if conversion fails due to memory exhaustion.
-*   **Concurrency Control**: Uses an SQLite database queue with atomic transactions to safely handle file ingest operations, paired with robust state management.
+*   **Heuristic Learning Database (New!)**: Uses a local SQLite database (`conversion_data.db`) to track processing history, remembering optimal compression tiers for specific video resolutions and formats.
+*   **Smart Fallbacks (Tiered Memory)**: Implements intelligent step-down retry loops that gracefully downgrade QSV parameters (`bf`, `lad`, `async_depth`) if conversion encounters VRAM exhaustion.
+*   **Thread-Safe Concurrency**: Replaces legacy blocking sleeps with `threading.Event().wait()` mechanisms, ensuring the daemon responds immediately to SIGINT/SIGTERM shutdown signals without leaving orphaned processes.
+*   **Atomic Transactions**: Uses the SQLite queue with strict state management (Pending -> Processing -> Completed/Failed) to securely process and prevent duplicate encodes.
 
 ### **2. Intelligent Content Handling**
 *   **Smart Detection**: Automatically distinguishes between **Movies** and **TV Series** based on folder structure and file patterns.
@@ -83,19 +83,20 @@ pip3 install concurrent-log-handler
 
 ## **Project Structure**
 
-The project has been refactored into modular components following Domain-Driven Design (DDD) principles:
+The project has been refactored into modular components following strict Domain-Driven Design (DDD) principles with zero procedural side-effects:
 
-*   **`core.py`**: The main entry point and worker orchestration.
-*   **`models.py`**: Domain-Driven Design (DDD) domain models and data structures.
+*   **`core.py`**: The main orchestration worker utilizing `MediaFactory`.
+*   **`models.py`**: Domain-Driven Design (DDD) domain models (`Movie`, `TVEpisode`). Encapsulates identity and target resolution logic cleanly.
 *   **`exceptions.py`**: Centralized custom exceptions for robust error handling.
-*   **`db_utils.py`**: SQLite database operations for queue state and heuristic learning.
-*   **`conversion_utils.py`**: Strategy and pipeline logic for processing movies and TV series.
-*   **`movie_utils.py` & `tvseries_utils.py`**: Specialized logic for naming and metadata.
-*   **`encoding_utils.py`**: FFmpeg QSV command generation, stream handling, and pipeline patterns.
+*   **`db_utils.py`**: SQLite database operations for thread-safe queue transactions and heuristic learning profiles.
+*   **`conversion_utils.py`**: The `ProcessingPipeline` coordinating subtitles, video, and filesystem relocation strategies safely.
+*   **`movie_utils.py` & `tvseries_utils.py`**: Specialized pure functions for stateless metadata and directory mapping.
+*   **`encoding_utils.py`**: `Builder` and `Strategy` patterns (e.g., `IntelQSVStrategy`) for robust FFmpeg command generation.
+*   **`subtitle_utils.py`**: External extraction, encoding, character replacement, and file state integrity checks.
+*   **`file_utils.py`**: Robust cross-device directory manipulation operations.
 *   **`email_utils.py`**: SMTP email notification logic.
-*   **`logging_utils.py`**: Centralized logging logic.
-*   **`metadata_utils.py`**: TMDB API integration.
-*   **`tests/`**: Contains all unit and integration tests (`test_*.py`, `reproduce_*.py`).
+*   **`logging_utils.py`**: Centralized, per-process logging tracking.
+*   **`tests/`**: Contains all unit and integration tests.
 
 ---
 

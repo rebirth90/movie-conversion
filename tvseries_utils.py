@@ -9,7 +9,7 @@ import logging
 import re
 import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from db_utils import DatabaseManager

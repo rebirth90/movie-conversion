@@ -9,6 +9,7 @@ import logging
 
 import sys
 import threading
+import traceback
 import re
 from pathlib import Path
 from datetime import datetime
@@ -64,7 +65,6 @@ def setup_logging(config: AppConfig) -> Optional[logging.Logger]:
     
     except Exception as e:
         print(f"CRITICAL_LOGGING_FAILURE: {e}")
-        import traceback
         traceback.print_exc()
         return None
 

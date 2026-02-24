@@ -5,9 +5,9 @@ Orchestrates Domain Models, Strategies, and Database heuristics for robust conve
 
 import logging
 from pathlib import Path
-import time
 import glob
 from typing import Optional
+import threading
 
 from models import JobContext, EncodingTier
 from file_utils import linux_mv
@@ -172,7 +172,7 @@ class ProcessingPipeline:
                 if self.context.shutdown_event:
                     self.context.shutdown_event.wait(2)
                 else:
-                    time.sleep(2)  # Cooldown HW
+                    threading.Event().wait(2)  # Cooldown HW
                 continue
             except Exception as e:
                 logger.exception(f"Encoding failed: {e}")

@@ -3,7 +3,6 @@ import logging
 from pathlib import Path
 import subprocess
 import json
-import time
 import re
 from charset_normalizer import from_bytes
 import glob
@@ -180,7 +179,7 @@ def extract_subtitle(movie_file: Path, movie_name: str, output_dir: Path, config
     if shutdown_event:
         shutdown_event.wait(0.5)
     else:
-        time.sleep(0.5)
+        threading.Event().wait(0.5)
 
     if not subtitle_file.exists():
         logger.warning(f"Extracted subtitle file does not exist: {subtitle_file}")
@@ -394,10 +393,14 @@ def find_or_extract_subtitle(movie_file: Path, movie_name: str, output_dir: Path
         # FIX: Rename the file if the name is different
         if subtitle_path != existing_subtitle_file:
             logger.info(f"Renaming subtitle: {existing_subtitle_file.name} -> {subtitle_path.name}")
-            if linux_mv(existing_subtitle_file, subtitle_path):
+            try:
+                linux_mv(existing_subtitle_file, subtitle_path, shutdown_event)
+                if not subtitle_path.exists():
+                    logger.error("Subtitle rename failed silently (file missing)")
+                    return None, None, None
                 logger.info("Subtitle renamed successfully")
-            else:
-                logger.error("Failed to rename subtitle")
+            except Exception as e:
+                logger.error(f"Failed to rename subtitle: {e}")
                 return None, None, None
 
         return subtitle_path, language, extension

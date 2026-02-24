@@ -4,8 +4,6 @@ import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
-from pathlib import Path
-from typing import Optional
 from config import AppConfig
 
 logger = logging.getLogger(__name__)
@@ -50,16 +48,15 @@ def send_failure_email(config: AppConfig, subject: str, body: str, attachment_pa
                     except Exception as e:
                         logger.warning(f"Failed to attach file {path}: {e}", exc_info=True)
 
-        # Connect to SMTP Server
-        if config.email_smtp_ssl:
-            server = smtplib.SMTP_SSL(config.email_smtp_host, int(config.email_smtp_port))
-        else:
-            server = smtplib.SMTP(config.email_smtp_host, int(config.email_smtp_port))
-            server.starttls() # Upgrade connection to secure
-
-        server.login(config.email_smtp_username, config.email_smtp_password)
-        server.send_message(msg)
-        server.quit()
+        # Connect to SMTP Server safely using a Context Manager to prevent socket leaks
+        server_class = smtplib.SMTP_SSL if config.email_smtp_ssl else smtplib.SMTP
+        
+        with server_class(config.email_smtp_host, int(config.email_smtp_port)) as server:
+            if not config.email_smtp_ssl:
+                server.starttls() # Upgrade connection to secure
+                
+            server.login(config.email_smtp_username, config.email_smtp_password)
+            server.send_message(msg)
         
         logger.info(f"Failure notification sent to {config.email_recipient}")
         return True

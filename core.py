@@ -63,12 +63,12 @@ def queue_worker_loop(config: AppConfig, shutdown_event: threading.Event, poll_i
                 # ===== END SAFEGUARD =====
 
                 # ===== MEDIA TYPE IDENTIFICATION =====
-                job_path_abs_str = str(job_path.absolute())
+                job_path_abs = job_path.absolute()
                 media_type = MediaType.UNKNOWN
                 
-                if job_path_abs_str.startswith(str(config.base_movies_root)):
+                if job_path_abs.is_relative_to(config.base_movies_root):
                     media_type = MediaType.MOVIE
-                elif job_path_abs_str.startswith(str(config.base_tvseries_root)):
+                elif job_path_abs.is_relative_to(config.base_tvseries_root):
                     media_type = MediaType.TVSERIES
                     
                 # Instantiate MediaItem Domain Models via Factory
@@ -95,10 +95,11 @@ def queue_worker_loop(config: AppConfig, shutdown_event: threading.Event, poll_i
                 for media_item in media_items:
                     log_name = media_item.clean_name()
                     
-                    # Start per-job logging
-                    general_log_path = start_job_logging(config, log_name)
-                    
+                    general_log_path = None
                     try:
+                        # Start per-job logging
+                        general_log_path = start_job_logging(config, log_name)
+                        
                         # Assemble Context, Strategy and Pipeline
                         strategy = IntelQSVStrategy(config)
                         context = JobContext(config=config, db=db, media_item=media_item, strategy=strategy, job_id=job_id, shutdown_event=shutdown_event)
