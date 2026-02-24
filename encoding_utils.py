@@ -222,10 +222,10 @@ class IntelQSVStrategy(EncoderStrategy):
             pad_filter = "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2"
             builder.add_filter(pad_filter)
             sw_fmt = "p010le" if ('10' in stream_info.pix_fmt or 'p010' in stream_info.pix_fmt) else "nv12"
-            builder.add_filter(f"format={sw_fmt},hwupload")
+            builder.add_filter(f"format={sw_fmt},hwupload=extra_hw_frames=64")
         elif not is_hw_supported:
             sw_fmt = "p010le" if ('10' in stream_info.pix_fmt or 'p010' in stream_info.pix_fmt) else "nv12"
-            builder.add_filter(f"format={sw_fmt},hwupload")
+            builder.add_filter(f"format={sw_fmt},hwupload=extra_hw_frames=64")
         else:
             hw_format = "p010le" if ('10' in stream_info.pix_fmt or 'p010' in stream_info.pix_fmt) else "nv12"
             w_h = ""

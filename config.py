@@ -33,7 +33,7 @@ class AppConfig:
     base_tvseries_root: Path = Path("/data/scratch/tv-series")
     target_movies_dir: Path = Path("/data/archive/movies")
     target_tvseries_dir: Path = Path("/data/archive/tv-series")
-    queue_file: Path = Path("/data/scratch/conversion.txt")
+    queue_file: Path = Path("/data/archive/conversion.txt")
     db_path: Path = Path(__file__).resolve().parent / "conversion_data.db"
 
     # TMDB API
