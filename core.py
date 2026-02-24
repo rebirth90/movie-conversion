@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import logging
 import time
-import signal
 import glob
 from pathlib import Path
 from config import AppConfig

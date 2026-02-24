@@ -177,7 +177,7 @@ def extract_subtitle(movie_file: Path, movie_name: str, output_dir: Path, config
     if shutdown_event:
         shutdown_event.wait(0.5)
     else:
-        threading.Event().wait(0.5)
+        time.sleep(0.5)
 
     if not subtitle_file.exists():
         logger.warning(f"Extracted subtitle file does not exist: {subtitle_file}")

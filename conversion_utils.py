@@ -5,12 +5,11 @@ Orchestrates Domain Models, Strategies, and Database heuristics for robust conve
 
 import logging
 from pathlib import Path
-import shutil
 import time
 import glob
 from typing import Optional
 
-from models import JobContext, EncodingTier, JobStatus
+from models import JobContext, EncodingTier
 from file_utils import linux_mv
 from encoding_utils import execute_process
 from subtitle_utils import process_subtitle
@@ -39,7 +38,14 @@ class ProcessingPipeline:
             
         if check_path.exists():
             logger.warning(f"TARGET_EXISTS: {check_path.name}. Skipping conversion.")
-            # Clean up associated subtitles to prevent orphans
+            # Clean up associated subtitles to prevent orphans using glob
+            source_dir = self.context.media_item.source_path.parent
+            clean = self.context.media_item.clean_name()
+            for ext in ['srt', 'sub', 'idx', 'ass', 'vtt', 'sup']:
+                for orphan in source_dir.glob(f"{clean}*.{ext}"):
+                    orphan.unlink(missing_ok=True)
+                    
+            # Fallback for exact source name match
             for ext in ['.srt', '.sub', '.idx', '.ass']:
                 sub_file = self.context.media_item.source_path.with_suffix(ext)
                 sub_file.unlink(missing_ok=True)

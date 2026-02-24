@@ -163,6 +163,10 @@ class IntelQSVStrategy(EncoderStrategy):
             stream_info.height <= 1080
         )
 
+        if is_hw_supported and (stream_info.width < 1920 or stream_info.height < 1080):
+            logger.info(f"ALIGNMENT CORRECTION: {stream_info.width}x{stream_info.height} requires padding. Forcing hybrid decode.")
+            is_hw_supported = False
+
         if stream_info.width > 1920:
             logger.warning("4K source detected. Forcing Hybrid Software Decode to perform 1080p downscale.")
 
@@ -289,7 +293,7 @@ def execute_process(args: List[str], wait_for_completion: bool = True, config: O
             proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, text=True)
         
         if not wait_for_completion:
-            """Caller is responsible for calling proc.log_file.close() after proc finishes."""
+            # Caller is responsible for calling proc.log_file.close() after proc finishes.
             proc.log_file = log_file
             return proc
             
@@ -299,12 +303,15 @@ def execute_process(args: List[str], wait_for_completion: bool = True, config: O
                 logger.error(f"Command failed with returncode={proc.returncode}. Check log at: {log_file_path}")
             else:
                 logger.error(f"Command failed with returncode={proc.returncode}")
+            if log_file:
+                log_file.close()
             return None
             
+        if log_file:
+            log_file.close()
         return proc
     except Exception as e:
+        if log_file:
+            log_file.close()
         logger.exception(f"Failed to execute process: {e}")
         return None
-    finally:
-        if wait_for_completion and log_file:
-            log_file.close()
