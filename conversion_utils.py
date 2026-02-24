@@ -90,8 +90,8 @@ class ProcessingPipeline:
         logger.info("-- PHASE: Video Encoding --")
         # Define base tiers
         tiers = [
-            EncodingTier(bf=4, lad=20, async_depth=4, desc="Balanced (Start Here)"),
             EncodingTier(bf=7, lad=40, async_depth=8, desc="Max Quality (High VRAM)"),
+            EncodingTier(bf=4, lad=20, async_depth=4, desc="Balanced (Start Here)"),
             EncodingTier(bf=0, lad=10, async_depth=2, desc="Safe Mode (Low VRAM)")
         ]
 

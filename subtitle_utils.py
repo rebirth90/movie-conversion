@@ -116,31 +116,34 @@ def ffmpeg_extract_subtitle(movie_file: Path, movie_name: str, folder: Path, tra
     logger.info(f"Extracting {codec} subtitle as .{extension}: {subtitle_path}")
 
     try:
-        match codec:
-            case "subrip":
-                args = [
-                    "-i",
-                    str(movie_file),
-                    "-map",
-                    f"0:{track_id}",
-                    str(subtitle_path),
-                ]
-                subprocess.run(
-                    [str(config.ffmpeg_path)] + args,
-                    capture_output=True,
-                    text=True,
-                    stdin=subprocess.DEVNULL,
-                    check=True,
-                )
-            case _:
-                # Use mkvextract for MKV containers (preserves codec)
-                args = ["tracks", str(movie_file), f"{track_id}:{subtitle_path}"]
-                subprocess.run(
-                    [str(config.mkvextract_path)] + args,
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
+        if codec in ["subrip", "ass", "ssa", "webvtt", "mov_text"]:
+            args = [
+                "-i",
+                str(movie_file),
+                "-map",
+                f"0:{track_id}",
+                str(subtitle_path),
+            ]
+            subprocess.run(
+                [str(config.ffmpeg_path)] + args,
+                capture_output=True,
+                text=True,
+                stdin=subprocess.DEVNULL,
+                check=True,
+            )
+        else:
+            if movie_file.suffix.lower() != '.mkv':
+                logger.error(f"Cannot extract image codec '{codec}' without mkvextract since {movie_file.name} is not an MKV.")
+                return None
+                
+            # Use mkvextract for MKV containers (preserves codec)
+            args = ["tracks", str(movie_file), f"{track_id}:{subtitle_path}"]
+            subprocess.run(
+                [str(config.mkvextract_path)] + args,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
 
         if subtitle_path.exists():
             logger.info(f"Successfully extracted subtitle: {subtitle_path}")

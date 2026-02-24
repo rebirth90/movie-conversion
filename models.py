@@ -70,7 +70,7 @@ class VideoStreamInfo:
             profile = track.get("profile", "unknown")
             pix_fmt = track.get("pix_fmt", "unknown")
 
-            if not width or height is None:
+            if width is None or height is None:
                 raise MediaValidationError(f"Missing width/height in {filepath}")
                 
             master_display = ""

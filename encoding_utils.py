@@ -245,6 +245,8 @@ class IntelQSVStrategy(EncoderStrategy):
                 filter_parts.append(f"format={hw_format}")
                 vpp_filter = f"vpp_qsv={':'.join(filter_parts)}"
                 builder.add_filter(vpp_filter)
+            else:
+                builder.add_filter(f"vpp_qsv=format={hw_format}")
 
         # --- ENCODER OPTIONS ---
         builder.add_video_option("-c:v", "hevc_qsv")
