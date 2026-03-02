@@ -189,7 +189,13 @@ class Movie(MediaItem):
             return self.source_path.stem
 
     def compute_final_directory(self) -> Path:
-        return self.config.target_movies_dir / self.clean_name()
+        try:
+            # Extract the genre folder (e.g., 'horror') by comparing the job's parent to the base root
+            rel_parent = self.original_job_path.parent.relative_to(self.config.base_movies_root)
+            return self.config.target_movies_dir / rel_parent / self.clean_name()
+        except ValueError:
+            # Fallback if the path is somehow not relative to the root
+            return self.config.target_movies_dir / self.clean_name()
 
     def cleanup_source_directory(self, logger: logging.Logger, final_dir: Path) -> None:
         if not self.source_path.exists():

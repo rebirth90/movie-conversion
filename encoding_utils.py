@@ -222,10 +222,10 @@ class IntelQSVStrategy(EncoderStrategy):
             pad_filter = "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2"
             builder.add_filter(pad_filter)
             sw_fmt = "p010le" if ('10' in stream_info.pix_fmt or 'p010' in stream_info.pix_fmt) else "nv12"
-            builder.add_filter(f"format={sw_fmt},hwupload")
+            builder.add_filter(f"format={sw_fmt},hwupload=extra_hw_frames=64")
         elif not is_hw_supported:
             sw_fmt = "p010le" if ('10' in stream_info.pix_fmt or 'p010' in stream_info.pix_fmt) else "nv12"
-            builder.add_filter(f"format={sw_fmt},hwupload")
+            builder.add_filter(f"format={sw_fmt},hwupload=extra_hw_frames=64")
         else:
             hw_format = "p010le" if ('10' in stream_info.pix_fmt or 'p010' in stream_info.pix_fmt) else "nv12"
             w_h = ""
@@ -252,7 +252,7 @@ class IntelQSVStrategy(EncoderStrategy):
         builder.add_video_option("-c:v", "hevc_qsv")
         enc_profile = "main10" if ('10' in stream_info.pix_fmt or 'p010' in stream_info.pix_fmt) else "main"
         builder.add_video_option("-profile:v", enc_profile)
-        builder.add_video_option("-level:v", "5.1")
+        # NOTE: -level:v causes crashes on Gen9.5 hevc_qsv. Let the encoder auto-determine level.
         builder.add_video_option("-preset", self.config.qsv_preset)
         builder.add_video_option("-global_quality", str(self.config.global_quality_default))
         builder.add_video_option("-b:v", "0")
@@ -262,14 +262,16 @@ class IntelQSVStrategy(EncoderStrategy):
             builder.add_video_option("-cll", stream_info.max_cll)
         
         # QSV Customizations
-        builder.add_video_option("-look_ahead", "1")
-        builder.add_video_option("-look_ahead_depth", str(lad))
+        # NOTE: Gen9.5 HEVC does not support look_ahead. Disabled to prevent QSV runtime errors.
+        builder.add_video_option("-look_ahead", "0")
+        # builder.add_video_option("-look_ahead_depth", str(lad))  # Unused when look_ahead=0
         builder.add_video_option("-async_depth", str(async_depth))
         
         # Golden standard controls
         builder.add_video_option("-bf", str(bf))
         builder.add_video_option("-g", "240")
-        builder.add_video_option("-rc_mode", "icq")
+        # Gen9.5 HEVC does not support ICQ, fallback to CQP
+        builder.add_video_option("-rc_mode", "cqp")
         
         # Output options
         builder.add_output_option("-max_muxing_queue_size", "9999")
