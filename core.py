@@ -53,16 +53,28 @@ def queue_worker_loop(config: AppConfig, shutdown_event: threading.Event, poll_i
             if job_record:
                 job_id, job_path_str = job_record
                 db.update_job_status(job_id, JobStatus.PROCESSING.value)
+                db.update_job_stage(job_id, "DEQUEUED")
+                db.set_stage_result(job_id, 'p1-input', 'pass')
+                db.set_stage_result(job_id, 'p1-queue', 'pass')
+                db.set_stage_result(job_id, 'p2-dequeue', 'pass')
                 logger.info(f"DEQUEUED_JOB [{job_id}]: {job_path_str}")
                 job_path = Path(job_path_str)
 
                 # ===== SAFEGUARD: REJECT SEEDING PATHS =====
                 if not should_process_path(job_path):
                     db.update_job_status(job_id, JobStatus.REJECTED.value)
+                    db.update_job_stage(job_id, "PATH_REJECTED")
+                    db.set_stage_result(job_id, 'p2-fail', 'pass')  # rejection branch taken
+                    db.set_stage_result(job_id, 'p2-pass', 'fail')
                     continue
                 # ===== END SAFEGUARD =====
 
+                db.set_stage_result(job_id, 'p2-fail', 'skip')  # validation passed, fail branch not taken
+                db.set_stage_result(job_id, 'p2-pass', 'pass')
+
                 # ===== MEDIA TYPE IDENTIFICATION =====
+                db.update_job_stage(job_id, "MEDIA_TYPE_ROUTER")
+                db.set_stage_result(job_id, 'p3-router', 'pass')
                 job_path_abs = job_path.absolute()
                 media_type = MediaType.UNKNOWN
                 
@@ -88,6 +100,13 @@ def queue_worker_loop(config: AppConfig, shutdown_event: threading.Event, poll_i
                      db.update_job_status(job_id, JobStatus.REJECTED.value)
                      continue
 
+                # Record factory stage — only the taken branch gets 'pass'
+                db.update_job_stage(job_id, "FACTORY_MOVIE" if media_type == MediaType.MOVIE else "FACTORY_TV")
+                db.set_stage_result(job_id, 'p3-movie', 'pass' if media_type == MediaType.MOVIE else 'skip')
+                db.set_stage_result(job_id, 'p3-tv',    'skip' if media_type == MediaType.MOVIE else 'pass')
+                db.set_stage_result(job_id, 'p4-movie', 'pass' if media_type == MediaType.MOVIE else 'skip')
+                db.set_stage_result(job_id, 'p4-tv',    'skip' if media_type == MediaType.MOVIE else 'pass')
+                
                 all_successful = True
                 shutdown_requested = False
                 failed_items = []

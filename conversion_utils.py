@@ -25,6 +25,8 @@ class ProcessingPipeline:
     def run(self) -> Optional[Path]:
         """Executes the conversion pipeline."""
         logger.info(f"=== PIPELINE STARTED: {self.context.media_item.source_path.name} ===")
+        db = self.context.db
+        jid = self.context.job_id
         
         # Fast-fail if target already exists
         try:
@@ -35,9 +37,13 @@ class ProcessingPipeline:
             
         expected_mp4 = f"{self.context.media_item.clean_name()}.mp4"
         check_path = final_dir / expected_mp4
-            
+
+        db.set_stage_result(jid, 'p5-check', 'pass')
+        self.context.db.update_job_stage(jid, "EXISTENCE_CHECK")
         if check_path.exists():
             logger.warning(f"TARGET_EXISTS: {check_path.name}. Skipping conversion.")
+            db.set_stage_result(jid, 'p5-fail', 'pass')   # fast-fail branch taken = pass outcome
+            self.context.db.update_job_stage(jid, "FAST_FAIL")
             # Clean up associated subtitles to prevent orphans using glob
             source_dir = self.context.media_item.source_path.parent
             clean = self.context.media_item.clean_name()
@@ -51,6 +57,8 @@ class ProcessingPipeline:
                 sub_file.unlink(missing_ok=True)
             self.context.media_item.cleanup_source_directory(logger, final_dir)
             return check_path.parent
+        
+        db.set_stage_result(jid, 'p5-pass', 'pass')  # mp4 did not exist, proceeding
         
         # --- PHASE 1: Subtitle Extraction ---
         subtitle_path = self._extract_subtitles()
@@ -69,17 +77,40 @@ class ProcessingPipeline:
     def _extract_subtitles(self) -> Path:
         """Handles subtitle extraction and standardization."""
         logger.info("-- PHASE: Subtitle Extraction --")
+        db = self.context.db
+        jid = self.context.job_id
+        db.set_stage_result(jid, 'p6-discovery', 'pass')  # discovery phase always attempted
+        self.context.db.update_job_stage(jid, "SUBTITLE_EXTRACTION")
         try:
-            sub = process_subtitle(self.context.media_item.source_path, self.context.media_item.clean_name(), self.context.config, self.context.shutdown_event)
+            sub = process_subtitle(
+                self.context.media_item.source_path,
+                self.context.media_item.clean_name(),
+                self.context.config,
+                self.context.shutdown_event
+            )
             if not sub:
-                logger.warning("No subtitle processed. Continuing with video only.")
+                logger.warning("No subtitles found. Continuing with video only.")
+                # Neither subtitle branch was found — mark both as neutral skip
+                db.set_stage_result(jid, 'p6-vobsub', 'skip')
+                db.set_stage_result(jid, 'p6-text', 'skip')
+                self.context.db.update_job_stage(jid, "SUBTITLE_NONE")
                 return None
                 
             logger.info(f"Subtitle processed: {sub.name}")
+            # Determine which branch was used from the file extension
+            ext = sub.suffix.lower()
+            if ext in ('.sub', '.idx'):
+                db.set_stage_result(jid, 'p6-vobsub', 'pass')
+                db.set_stage_result(jid, 'p6-text', 'skip')
+            else:
+                db.set_stage_result(jid, 'p6-text', 'pass')
+                db.set_stage_result(jid, 'p6-vobsub', 'skip')
+            self.context.db.update_job_stage(jid, "SUBTITLE_DONE")
             return sub
         except Exception as e:
             logger.warning(f"Subtitle processing failed: {e}", exc_info=True)
-            # Continuing since subtitle failure is non-fatal usually
+            db.set_stage_result(jid, 'p6-vobsub', 'fail')
+            db.set_stage_result(jid, 'p6-text', 'fail')
             return None
 
     def _encode_video_with_heuristics(self) -> Path:
@@ -88,6 +119,10 @@ class ProcessingPipeline:
         Steps down smoothly upon VRAMExhaustionError.
         """
         logger.info("-- PHASE: Video Encoding --")
+        db = self.context.db
+        jid = self.context.job_id
+        db.set_stage_result(jid, 'p7-heuristics', 'pass')
+        self.context.db.update_job_stage(jid, "HEURISTICS_CHECK")
         # Define base tiers
         tiers = [
             EncodingTier(bf=7, lad=40, async_depth=8, desc="Max Quality (High VRAM)"),
@@ -121,7 +156,10 @@ class ProcessingPipeline:
             if self.context.shutdown_event and self.context.shutdown_event.is_set():
                 logger.info("Shutdown event detected. Breaking encode loop.")
                 raise ShutdownRequestedError("Shutdown requested during execution.")
-                
+            
+            _tier_stage = "ENCODING_TIER_HEURISTIC" if "Heuristic" in attempt.desc else f"ENCODING_TIER_{attempt.desc.split()[0].upper()}"
+            self.context.db.update_job_stage(jid, _tier_stage)
+            db.set_stage_result(jid, 'p7-tiers', 'pass')  # mark tiers card active
             logger.info(f"ATTEMPT: {attempt.desc} -> bf={attempt.bf}, lad={attempt.lad}")
             
             builder = self.context.strategy.build_command(
@@ -156,6 +194,10 @@ class ProcessingPipeline:
                      raise VideoEncodingError("Output file missing or empty")
                      
                 logger.info(f"Encoding successful on tier: {attempt.desc}")
+                db.set_stage_result(jid, 'p7-audio', 'pass')   # audio converted as part of encode
+                db.set_stage_result(jid, 'p7-tiers', 'pass')
+                db.set_stage_result(jid, 'p7-outcome', 'pass')
+                self.context.db.update_job_stage(jid, "ENCODING_SUCCESS")
                 
                 # Save success heuristics cleanly
                 if s_info:
@@ -176,27 +218,43 @@ class ProcessingPipeline:
                 continue
             except Exception as e:
                 logger.exception(f"Encoding failed: {e}")
+                db.set_stage_result(jid, 'p7-audio', 'fail')
+                db.set_stage_result(jid, 'p7-tiers', 'fail')
+                db.set_stage_result(jid, 'p7-outcome', 'fail')
                 if temp_output.exists():
                      temp_output.unlink(missing_ok=True)
                 raise VideoEncodingError(f"Fatal encode error: {e}")
 
-        # If loop exhausts
+        # If loop exhausts all tiers
+        db.set_stage_result(jid, 'p7-audio', 'fail')
+        db.set_stage_result(jid, 'p7-tiers', 'fail')
+        db.set_stage_result(jid, 'p7-outcome', 'fail')
         raise VideoEncodingError("All encoding memory tiers failed.")
 
     def _relocate(self, encoded_file: Path, subtitle_file: Path) -> Path:
         """Moves fully processed artifacts exactly into their target Domain structure."""
         logger.info("-- PHASE: Relocation --")
+        db = self.context.db
+        jid = self.context.job_id
+        self.context.db.update_job_stage(jid, "RELOCATION")
         
         try:
             final_dir = self.context.media_item.compute_final_directory()
             final_dir.mkdir(parents=True, exist_ok=True)
         except ValueError as e:
             logger.error(f"Path resolution error during relocation: {e}")
+            db.set_stage_result(jid, 'p8-relocate', 'fail')
             raise ValueError(f"Relocation failed (outside specific base root): {e}")
         
         # Move video
         final_video_path = final_dir / f"{self.context.media_item.clean_name()}.mp4"
         linux_mv(encoded_file, final_video_path, self.context.shutdown_event)
+        db.set_stage_result(jid, 'p8-relocate', 'pass')
+        
+        # Determine movie vs TV branch from target dir
+        is_movie = str(final_dir).startswith(str(self.context.config.target_movies_dir))
+        db.set_stage_result(jid, 'p8-movie', 'pass' if is_movie else 'skip')
+        db.set_stage_result(jid, 'p8-tv',    'skip' if is_movie else 'pass')
         
         # Move subtitle if exists
         if subtitle_file and subtitle_file.exists():
@@ -211,5 +269,7 @@ class ProcessingPipeline:
              
         # Cleanup original source video to save space
         self.context.media_item.cleanup_source_directory(logger, final_dir)
+        db.set_stage_result(jid, 'p8-cleanup', 'pass')
+        db.set_stage_result(jid, 'p8-complete', 'pass')
             
         return final_dir

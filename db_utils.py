@@ -31,12 +31,23 @@ class DatabaseManager:
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                             path TEXT UNIQUE NOT NULL,
                             status TEXT NOT NULL DEFAULT 'PENDING',
+                            current_stage TEXT DEFAULT NULL,
+                            stage_results TEXT DEFAULT '{}',
                             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                         )
                     """)
                     
-                    # Heuristics Profiles Table
+                    # Add columns to existing databases (idempotent)
+                    for col_sql in [
+                        "ALTER TABLE jobs ADD COLUMN current_stage TEXT DEFAULT NULL",
+                        "ALTER TABLE jobs ADD COLUMN stage_results TEXT DEFAULT '{}'",
+                    ]:
+                        try:
+                            cursor.execute(col_sql)
+                            conn.commit()
+                        except Exception:
+                            pass  # Column already exists
                     # UNIQUE constraint on (width, height, codec, pix_fmt) 
                     # so we only have one "best" profile for a given set of parameters.
                     cursor.execute("""
@@ -145,6 +156,40 @@ class DatabaseManager:
             cursor.execute(
                 "UPDATE jobs SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (status, job_id)
+            )
+            conn.commit()
+
+    def update_job_stage(self, job_id: int, stage: str):
+        """Write the current pipeline stage so remote clients can poll it in real-time."""
+        with self._lock, closing(self._get_connection()) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE jobs SET current_stage = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (stage, job_id)
+            )
+            conn.commit()
+
+    def set_stage_result(self, job_id: int, card_id: str, result: str):
+        """Atomically merge a per-card pass/fail result into the stage_results JSON blob.
+        
+        result should be 'pass' or 'fail'.
+        """
+        import json
+        with self._lock, closing(self._get_connection()) as conn:
+            cursor = conn.cursor()
+            # Read current JSON
+            cursor.execute("SELECT stage_results FROM jobs WHERE id = ?", (job_id,))
+            row = cursor.fetchone()
+            if row is None:
+                return
+            try:
+                current = json.loads(row[0] or '{}')
+            except Exception:
+                current = {}
+            current[card_id] = result
+            cursor.execute(
+                "UPDATE jobs SET stage_results = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (json.dumps(current), job_id)
             )
             conn.commit()
 
