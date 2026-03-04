@@ -12,6 +12,8 @@ from models import MediaType, MediaFactory, JobStatus, JobContext
 from exceptions import MediaValidationError, ShutdownRequestedError
 from encoding_utils import IntelQSVStrategy
 from conversion_utils import ProcessingPipeline
+from tvseries_utils import process_tv_series_directory
+from movie_utils import get_largest_movie_file
 import threading
 
 logger = logging.getLogger(__name__)
@@ -82,6 +84,18 @@ def queue_worker_loop(config: AppConfig, shutdown_event: threading.Event, poll_i
                     media_type = MediaType.MOVIE
                 elif job_path_abs.is_relative_to(config.base_tvseries_root):
                     media_type = MediaType.TVSERIES
+                    
+                if job_path_abs.is_dir():
+                    if media_type == MediaType.TVSERIES:
+                        process_tv_series_directory(job_path_abs, config, db)
+                    elif media_type == MediaType.MOVIE:
+                        actual_file = get_largest_movie_file(job_path_abs)
+                        if actual_file:
+                            db.add_job(str(actual_file.absolute()))
+                    
+                    db.update_job_status(job_id, JobStatus.COMPLETED.value)
+                    db.update_job_stage(job_id, "DIRECTORY_EXPANDED")
+                    continue
                     
                 # Instantiate MediaItem Domain Models via Factory
                 try:
